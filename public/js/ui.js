@@ -504,6 +504,9 @@ const UI = {
     return map;
   },
 
+  // Types de séances sans phases (ligne simple)
+  _SIMPLE_TYPES: {'ef':1,'sl':1,'recup':1,'rest':1},
+
   // Génère le HTML d'une ligne de séance
   _renderPlanDay(d, weekDates, now, skipPast) {
     const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
@@ -516,11 +519,14 @@ const UI = {
     const isToday = date && date.toDateString() === now.toDateString();
     const dateNum = date ? date.getDate() : '';
     const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
+    const detailHtml = this._SIMPLE_TYPES[d.type]
+      ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + d.detail + '</div>' : '')
+      : this._renderSessionPhases(d.detail, d.label);
     return '<div class="day-row">' +
       '<div class="day-name' + (isToday ? ' today' : '') + '">' + dayLabel + '</div>' +
       '<div style="flex:1;">' +
       '<span class="session-pill ' + (typeClass[d.type] || 'pill-ef') + '">' + d.label + '</span>' +
-      this._renderSessionPhases(d.detail, d.label) +
+      detailHtml +
       '</div>' +
       '</div>';
   },
