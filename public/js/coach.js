@@ -23,15 +23,22 @@ Génère TOUJOURS au minimum 2 semaines.
 Types valides : ef, tempo, vma, sl (sortie longue), recup
 N'inclure QUE les jours d'entraînement, PAS les jours de repos.
 
-FORMAT OBLIGATOIRE DU CHAMP "detail" — respecte EXACTEMENT cette syntaxe avec le caractère · comme séparateur de phases :
-"[échauffement] · [travail principal] · [retour au calme]"
+FORMAT DU CHAMP "detail" — deux règles selon le type de séance :
 
-EXEMPLES OBLIGATOIRES À SUIVRE :
-- EF    : "15' échauffement allure 5:50-6:10 · 10 km allure 5:40-5:55 FC<75% · 10' retour au calme allure 6:00"
-- VMA   : "15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme allure 6:00"
-- Seuil : "15' échauffement allure 5:50-6:10 · 3x8' allure 4:45/km r2' · 10' retour au calme allure 6:00"
-- SL    : "10' échauffement · 18 km allure 5:40-6:00 progressive · 10' retour au calme"
-INTERDIT : "puis", "ensuite", virgules comme séparateur de phases. Seul le · est autorisé entre les 3 phases.`,
+1. Séances intenses (VMA, seuil, tempo, fractionné) → OBLIGATOIREMENT 3 phases séparées par · :
+   "[échauffement] · [travail principal] · [retour au calme]"
+   Exemples :
+   - VMA   : "15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme"
+   - Seuil : "15' échauffement allure 5:50-6:10 · 3x8' allure 4:45/km r2' · 10' retour au calme"
+   - Tempo : "15' échauffement allure 5:50-6:10 · 20' allure 4:55-5:05/km · 10' retour au calme"
+
+2. Séances faciles (EF, sortie longue, récup) → une seule ligne descriptive, PAS de phases :
+   Exemples :
+   - EF : "10 km allure 5:50-6:10/km FC<75%, effort conversationnel"
+   - SL : "18 km allure 5:40-6:00/km, progression naturelle sur les 5 derniers km"
+   - Récup : "6 km très facile allure 6:10-6:30/km, jambes légères"
+
+INTERDIT pour les séances intenses : "puis", virgules comme séparateur de phases. Seul · est autorisé.`,
 
   // Envoie un message — ne sauvegarde PAS l'historique ici (géré dans app.js)
   async sendMessage(userMessage, systemOverride) {
@@ -300,6 +307,6 @@ Le champ "detail" doit OBLIGATOIREMENT utiliser le séparateur · entre les 3 ph
 
 {"weeks":[{"title":"Semaine du 09-06","volume_km":27,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 10 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 18 km allure 5:40-6:00 · 10' retour au calme"}]},{"title":"Semaine du 16-06","volume_km":29,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 11 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 7x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 20 km allure 5:40-6:00 · 10' retour au calme"}]}]}
 
-Remplace les valeurs par un plan personnalisé basé sur le profil. Respecte EXACTEMENT la structure et le séparateur ·.`;
+Remplace les valeurs par un plan personnalisé. Règle "detail" : séances intenses (VMA/seuil/tempo) → "échauff · travail · retour au calme" avec ·. Séances faciles (EF/SL/récup) → une ligne simple sans ·.`;
   }
 };
