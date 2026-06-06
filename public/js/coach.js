@@ -19,9 +19,11 @@ Règles :
 
 RÈGLE CRITIQUE SUR LE PLAN :
 Quand tu modifies ou proposes un plan d'entraînement, tu DOIS TOUJOURS inclure le JSON complet à la fin de ta réponse, dans ce format exact (sans markdown, sans backticks) :
-{"weeks":[{"title":"Semaine du X","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"10 km allure 6:00-6:20"}]}]}
+{"weeks":[{"title":"Semaine du X","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 · 5' retour au calme"}]},{"title":"Semaine du Y","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 · 5' retour au calme"}]}]}
 Types valides : ef, tempo, vma, sl (sortie longue), recup
-N'inclure QUE les jours d'entraînement, PAS les jours de repos.`,
+N'inclure QUE les jours d'entraînement, PAS les jours de repos.
+IMPORTANT : génère TOUJOURS au minimum 2 semaines dans le JSON (semaine en cours + semaine suivante).
+Pour le champ "detail", structure TOUJOURS avec le séparateur · : "Xmin échauffement · [travail principal] · Xmin retour au calme"`,
 
   // Envoie un message — ne sauvegarde PAS l'historique ici (géré dans app.js)
   async sendMessage(userMessage, systemOverride) {
@@ -285,9 +287,9 @@ CONSIGNES IMPORTANTES :
 - Si douleurs signalées → réduire l'intensité ou proposer récup active
 - Allures précises basées sur le niveau et les records
 
-RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) :
-{"weeks":[{"title":"Semaine du [date]","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"10 km allure 6:00-6:20 FC <75%"},{"day":"Jeu","type":"tempo","label":"Tempo","detail":"8 km dont 4 km allure seuil 5:10-5:20"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"18 km allure 6:10-6:30"}]}]}
+RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) avec EXACTEMENT 2 semaines :
+{"weeks":[{"title":"Semaine du [date]","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 FC <75% · 5' retour au calme"},{"day":"Jeu","type":"tempo","label":"Tempo","detail":"15' échauffement · 4 km allure seuil 5:10-5:20 · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 18 km allure 6:10-6:30 · 5' retour au calme"}]},{"title":"Semaine du [date+7]","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 11 km allure 6:00-6:20 FC <75% · 5' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement · 6x400m allure 4:30/km r1'30 · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 20 km allure 6:10-6:30 · 5' retour au calme"}]}]}
 
-Remplace avec un vrai plan personnalisé. Garde exactement cette structure JSON. Uniquement les jours d'entraînement, pas de repos.`;
+Remplace avec un vrai plan personnalisé sur 2 semaines. Garde exactement cette structure JSON. Uniquement les jours d'entraînement, pas de repos. Le detail doit TOUJOURS avoir le format "échauffement · travail · retour au calme" séparé par ·`;
   }
 };
