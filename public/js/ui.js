@@ -66,26 +66,25 @@ const UI = {
         </div>`;
     }
 
-    // This week plan
+    // This week plan + next week
     let planHtml = '';
     if (plan?.weeks?.[0]) {
-      const week = plan.weeks[0];
-      const typeMap = { ef: 'pill-ef', tempo: 'pill-tempo', vma: 'pill-vma', sl: 'pill-sl', rest: 'pill-rest', recup: 'pill-rest', test: 'pill-test' };
-      const labelMap = { ef: 'EF', tempo: 'Tempo', vma: 'VMA', sl: 'Sortie longue', rest: 'Repos', recup: 'Récup' };
-      const todayName = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][now.getDay()];
+      const weekDates0 = this._getWeekDates(0);
+      const weekDates1 = this._getWeekDates(1);
 
-      planHtml = `
-        <div class="section-header"><div class="section-title">Cette semaine</div><span class="volume-badge">${week.volume_km} km</span></div>
-        <div class="card" style="padding: 8px 14px;">
-          ${week.days.filter(d => d.type !== 'rest' && d.type !== 'recup').map(d => `
-            <div class="day-row">
-              <div class="day-name${d.day === todayName ? ' today' : ''}">${d.day}</div>
-              <div style="flex:1;">
-                <span class="session-pill ${typeMap[d.type] || 'pill-ef'}">${labelMap[d.type] || d.label}</span>
-                ${d.detail ? `<div class="session-detail" style="margin-top:3px;">${d.detail}</div>` : ''}
-              </div>
-            </div>`).join('')}
-        </div>`;
+      const renderHomeWeek = (week, weekDates, skipPast, title) => {
+        const daysHtml = week.days
+          .filter(d => d.type !== 'rest' && d.type !== 'recup')
+          .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
+          .filter(Boolean)
+          .join('');
+        if (!daysHtml && skipPast) return ''; // semaine en cours déjà passée
+        return '<div class="section-header"><div class="section-title">' + title + '</div><span class="volume-badge">' + week.volume_km + ' km</span></div>' +
+          '<div class="card" style="padding: 8px 14px;">' + (daysHtml || '<div style="padding:8px 0;font-size:13px;color:var(--text-hint);text-align:center;">Aucune séance</div>') + '</div>';
+      };
+
+      planHtml = renderHomeWeek(plan.weeks[0], weekDates0, true, 'Cette semaine');
+      if (plan.weeks[1]) planHtml += renderHomeWeek(plan.weeks[1], weekDates1, false, 'Semaine prochaine');
     } else {
       planHtml = `
         <div class="section-header"><div class="section-title">Plan d'entraînement</div></div>
@@ -486,6 +485,65 @@ const UI = {
     Storage.saveFeedback(actId, this._pendingFeedbacks[actId]);
   },
 
+  // ===== HELPERS PLAN =====
+
+  // Retourne un map {Lun: Date, Mar: Date, ...} pour la semaine décalée de weekOffset
+  _getWeekDates(weekOffset) {
+    const today = new Date();
+    const dow = today.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset + weekOffset * 7);
+    const dayNames = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+    const map = {};
+    dayNames.forEach(function(name, i) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      map[name] = d;
+    });
+    return map;
+  },
+
+  // Génère le HTML d'une ligne de séance
+  _renderPlanDay(d, weekDates, now, skipPast) {
+    const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
+    const date = weekDates[d.day];
+    if (skipPast && date) {
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59);
+      if (dayEnd < now) return '';
+    }
+    const isToday = date && date.toDateString() === now.toDateString();
+    const dateNum = date ? date.getDate() : '';
+    const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
+    return '<div class="day-row">' +
+      '<div class="day-name' + (isToday ? ' today' : '') + '">' + dayLabel + '</div>' +
+      '<div style="flex:1;">' +
+      '<span class="session-pill ' + (typeClass[d.type] || 'pill-ef') + '">' + d.label + '</span>' +
+      this._renderSessionPhases(d.detail, d.label) +
+      '</div>' +
+      '</div>';
+  },
+
+  // Découpe le detail en phases (échauffement · travail · récup) et ajoute le titre Strava
+  _renderSessionPhases(detail, label) {
+    if (!detail) return '';
+    const parts = detail.split('·').map(function(p) { return p.trim(); }).filter(Boolean);
+    if (parts.length <= 1) {
+      return '<div class="session-detail" style="margin-top:3px;">' + detail + '</div>';
+    }
+    const workParts = parts.length > 2 ? parts.slice(1, parts.length - 1) : [parts[0]];
+    const stravaTitle = label + ' — ' + workParts.join(' + ');
+    const safeTitle = stravaTitle.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    let html = '';
+    parts.forEach(function(p, i) {
+      const icon = (i === 0) ? '🟡' : (i === parts.length - 1) ? '🟢' : '🔴';
+      html += '<div class="session-phase">' + icon + ' ' + p + '</div>';
+    });
+    html += '<div class="session-strava-title" onclick="navigator.clipboard.writeText(\'' + safeTitle + '\').then(function(){UI.toast(\'📋 Copié !\')}).catch(function(){UI.toast(\'Copie manuelle\')})">📋 <span>' + stravaTitle + '</span></div>';
+    return html;
+  },
+
   // ===== PLAN TAB =====
   renderPlanTab(plan, isLoading) {
     const el = document.getElementById('plan-content');
@@ -504,27 +562,31 @@ const UI = {
       return;
     }
 
-    const typeClass = { ef: 'pill-ef', tempo: 'pill-tempo', vma: 'pill-vma', sl: 'pill-sl', rest: 'pill-rest', recup: 'pill-rest', test: 'pill-test' };
     const now = new Date();
-    const todayName = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][now.getDay()];
+    const weekDates0 = this._getWeekDates(0);
+    const weekDates1 = this._getWeekDates(1);
 
-    const weeksHtml = plan.weeks.map(week => `
-      <div>
-        <div class="week-header">
-          <div class="week-title">${week.title}</div>
-          <span class="volume-badge">${week.volume_km} km</span>
-        </div>
-        <div class="card" style="padding: 8px 14px;">
-          ${week.days.filter(d => d.type !== 'rest' && d.type !== 'recup').map(d => `
-            <div class="day-row">
-              <div class="day-name${d.day === todayName ? ' today' : ''}">${d.day}</div>
-              <div style="flex:1;">
-                <span class="session-pill ${typeClass[d.type] || 'pill-ef'}">${d.label}</span>
-                ${d.detail ? `<div class="session-detail" style="margin-top:3px;">${d.detail}</div>` : ''}
-              </div>
-            </div>`).join('')}
-        </div>
-      </div>`).join('');
+    const renderWeekBlock = (week, weekDates, skipPast, forceTitle) => {
+      const daysHtml = week.days
+        .filter(d => d.type !== 'rest' && d.type !== 'recup')
+        .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
+        .filter(Boolean)
+        .join('');
+      const title = forceTitle || week.title;
+      return '<div><div class="week-header"><div class="week-title">' + title + '</div><span class="volume-badge">' + week.volume_km + ' km</span></div>' +
+        '<div class="card" style="padding: 8px 14px;">' + (daysHtml || '<div style="padding:8px 0;font-size:13px;color:var(--text-hint);text-align:center;">Aucune séance cette semaine</div>') + '</div></div>';
+    };
+
+    let weeksHtml = '';
+    // Semaine courante (jours restants avec dates réelles)
+    if (plan.weeks[0]) weeksHtml += renderWeekBlock(plan.weeks[0], weekDates0, true, 'Cette semaine');
+    // Semaine suivante complète (avec dates réelles)
+    if (plan.weeks[1]) weeksHtml += renderWeekBlock(plan.weeks[1], weekDates1, false, 'Semaine prochaine');
+    // Semaines suivantes sans filtrage de date
+    for (let i = 2; i < plan.weeks.length; i++) {
+      const wDates = this._getWeekDates(i);
+      weeksHtml += renderWeekBlock(plan.weeks[i], wDates, false, null);
+    }
 
     el.innerHTML = `
       <div class="section-header">
@@ -654,8 +716,12 @@ const UI = {
       </div>
       <div class="settings-section">
         <div class="settings-group-label">Compte</div>
-        <div class="settings-row" onclick="App.resetApp()">
-          <span class="settings-label" style="color:var(--red);">Réinitialiser l'app</span>
+        <div class="settings-row" onclick="App.editProfile()">
+          <span class="settings-label">Modifier mon profil complet</span>
+          <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="settings-row" onclick="App.logout()">
+          <span class="settings-label" style="color:var(--red);">Se déconnecter</span>
         </div>
       </div>`;
   }

@@ -288,6 +288,16 @@ input[type=range]::-moz-range-thumb {
 .pill-vma { background: var(--red-light); color: var(--red); }
 .pill-rest { background: var(--gray-light); color: var(--gray); }
 .session-detail { font-size: 13px; color: var(--text-muted); flex: 1; }
+.session-phase { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+.session-strava-title {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 5px; padding: 3px 8px;
+  background: var(--bg3); border-radius: 6px;
+  font-size: 11px; color: var(--text-hint); cursor: pointer;
+  -webkit-user-select: none; user-select: none;
+}
+.session-strava-title:active { opacity: 0.6; }
+.session-strava-title span { color: var(--text-muted); }
 
 /* ===== ACTIVITY CARDS ===== */
 .act-card {

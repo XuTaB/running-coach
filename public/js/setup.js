@@ -28,7 +28,7 @@ const Setup = {
       'goal_secondary',
       d.goalSecondary === 'yes'    ? 'goal_race_2'      : null,
       'schedule',
-      'prs',
+      d.goalMain === 'start' ? null : 'prs',
       'plan_prep',
       'strava',
     ].filter(Boolean);
@@ -128,7 +128,7 @@ const Setup = {
         <div class="field">
           <label class="field-label">Expérience running</label>
           <div class="chips" id="s-exp">
-            ${[['beginner','Débutant — moins d\'1 an'],['intermediate','Régulier — 1 à 3 ans'],['advanced','Confirmé — 3 à 7 ans'],['expert','Expert — 7 ans+']].map(([v,l])=>
+            ${[['zero','🛋️ Zéro — jamais couru'],['beginner','Débutant — moins d\'1 an'],['intermediate','Régulier — 1 à 3 ans'],['advanced','Confirmé — 3 à 7 ans'],['expert','Expert — 7 ans+']].map(([v,l])=>
               `<div class="chip${d.experience===v?' active':''}" onclick="Setup._pick('experience','${v}',this,'s-exp')">${l}</div>`
             ).join('')}
           </div>

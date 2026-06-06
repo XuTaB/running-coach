@@ -740,6 +740,13 @@ const App = {
   },
 
 
+  logout() {
+    if (confirm('Te déconnecter ? Tes données sont sauvegardées dans le cloud et seront récupérées à ta prochaine connexion Strava.')) {
+      localStorage.clear();
+      location.reload();
+    }
+  },
+
   resetApp() {
     if (confirm('Supprimer toutes tes données ? Cette action est irréversible.')) {
       Storage.clear();
