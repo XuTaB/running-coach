@@ -554,41 +554,20 @@ const UI = {
     return html;
   },
 
-  // Détecte les phases échauffement / travail / récup dans du texte libre
+  // Détecte les phases dans du texte libre (quand pas de séparateur ·)
   _detectPhases(detail) {
-    var text = detail.trim();
+    // Split sur "puis" — séparateur naturel utilisé par Gemini
+    var parts = detail.split(/,?\s+puis\s+/i).map(function(p) { return p.trim(); }).filter(Boolean);
 
-    // ── 1. Cherche "retour au calme" ou "cool down" en fin → sépare le cooldown ──
-    var cooldown = '';
-    var cooldownRe = /,?\s*(\d[\d\s]*(?:km|min|')\s*(?:retour au calme|récupération|cooldown)[^\.\n]*?)\.?\s*$/i;
-    var cm = text.match(cooldownRe);
-    if (cm) {
-      cooldown = cm[1].trim();
-      text = text.slice(0, cm.index).trim().replace(/,\s*$/, '').trim();
+    if (parts.length >= 2) {
+      // Retire le préfixe "X km : " du premier bloc (ex: "7 km : 2 km échauffement...")
+      parts[0] = parts[0].replace(/^[\d\.]+\s*km\s*:\s*/i, '').trim();
+      // Retire les phrases de conseil en fin du dernier bloc (ex: "... Écoute bien tes hanches.")
+      var last = parts[parts.length - 1];
+      last = last.replace(/\.\s+[A-ZÀ-Ü][^.]{5,80}\.$/, '.').trim();
+      parts[parts.length - 1] = last;
+      return parts;
     }
-
-    // ── 2. Cherche "échauffement" en tête → sépare le warmup ──
-    var warmup = '';
-    // Retire le prefixe "X km : " si présent avant l'échauffement
-    var warmupRe = /^(?:[\d\.]+\s*km\s*:\s*)?(.+?échauffement[^,]*),?\s+(?:puis\s+)?/i;
-    var wm = text.match(warmupRe);
-    if (wm) {
-      warmup = wm[1].trim();
-      text = text.slice(wm[0].length).trim();
-    }
-
-    // ── 3. Assemble les phases ──
-    if (warmup || cooldown) {
-      var phases = [];
-      if (warmup)   phases.push(warmup);
-      if (text)     phases.push(text);
-      if (cooldown) phases.push(cooldown);
-      if (phases.length >= 2) return phases;
-    }
-
-    // ── 4. Fallback : split sur "puis" (SL progressive sans marqueurs) ──
-    var puisParts = detail.split(/,?\s+puis\s+/i).map(function(p) { return p.trim(); }).filter(Boolean);
-    if (puisParts.length >= 2) return puisParts;
 
     return [detail];
   },
