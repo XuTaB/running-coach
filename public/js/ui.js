@@ -528,10 +528,20 @@ const UI = {
   // Découpe le detail en phases (échauffement · travail · récup) et ajoute le titre Strava
   _renderSessionPhases(detail, label) {
     if (!detail) return '';
-    const parts = detail.split('·').map(function(p) { return p.trim(); }).filter(Boolean);
+
+    // Tentative 1 : séparateur · (format cible)
+    let parts = detail.split('·').map(function(p) { return p.trim(); }).filter(Boolean);
+
+    // Tentative 2 : si pas de ·, essaie de détecter les phases par mots-clés
+    if (parts.length <= 1) {
+      parts = this._detectPhases(detail);
+    }
+
+    // Pas de phases détectées → affichage simple
     if (parts.length <= 1) {
       return '<div class="session-detail" style="margin-top:3px;">' + detail + '</div>';
     }
+
     const workParts = parts.length > 2 ? parts.slice(1, parts.length - 1) : [parts[0]];
     const stravaTitle = label + ' — ' + workParts.join(' + ');
     const safeTitle = stravaTitle.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
@@ -542,6 +552,22 @@ const UI = {
     });
     html += '<div class="session-strava-title" onclick="navigator.clipboard.writeText(\'' + safeTitle + '\').then(function(){UI.toast(\'📋 Copié !\')}).catch(function(){UI.toast(\'Copie manuelle\')})">📋 <span>' + stravaTitle + '</span></div>';
     return html;
+  },
+
+  // Détecte les phases échauffement / travail / récup dans du texte libre
+  _detectPhases(detail) {
+    // Cherche les marqueurs d'échauffement et de retour au calme
+    const warmupRe = /^(.{5,60}?(?:échauffement|warm.?up).*?)[,.]?\s+(?:puis\s+)?(.+?)(?:[,.]?\s+(?:puis\s+)?(.{5,80}?(?:retour au calme|récup(?:ération)?|cool.?down).*))?$/i;
+    const m = detail.match(warmupRe);
+    if (m && m[1] && m[2]) {
+      const phases = [m[1].trim(), m[2].trim()];
+      if (m[3]) phases.push(m[3].trim());
+      return phases;
+    }
+    // Fallback : split sur " puis " si présent
+    const puisParts = detail.split(/\s+puis\s+/i).map(function(p) { return p.trim(); }).filter(Boolean);
+    if (puisParts.length >= 2) return puisParts;
+    return [detail];
   },
 
   // ===== PLAN TAB =====

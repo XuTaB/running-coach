@@ -18,12 +18,20 @@ Règles :
 - Base-toi sur les données fournies avant tout
 
 RÈGLE CRITIQUE SUR LE PLAN :
-Quand tu modifies ou proposes un plan d'entraînement, tu DOIS TOUJOURS inclure le JSON complet à la fin de ta réponse, dans ce format exact (sans markdown, sans backticks) :
-{"weeks":[{"title":"Semaine du X","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 · 5' retour au calme"}]},{"title":"Semaine du Y","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 · 5' retour au calme"}]}]}
+Quand tu modifies ou proposes un plan d'entraînement, tu DOIS TOUJOURS inclure le JSON complet à la fin de ta réponse (sans markdown, sans backticks).
+Génère TOUJOURS au minimum 2 semaines.
 Types valides : ef, tempo, vma, sl (sortie longue), recup
 N'inclure QUE les jours d'entraînement, PAS les jours de repos.
-IMPORTANT : génère TOUJOURS au minimum 2 semaines dans le JSON (semaine en cours + semaine suivante).
-Pour le champ "detail", structure TOUJOURS avec le séparateur · : "Xmin échauffement · [travail principal] · Xmin retour au calme"`,
+
+FORMAT OBLIGATOIRE DU CHAMP "detail" — respecte EXACTEMENT cette syntaxe avec le caractère · comme séparateur de phases :
+"[échauffement] · [travail principal] · [retour au calme]"
+
+EXEMPLES OBLIGATOIRES À SUIVRE :
+- EF    : "15' échauffement allure 5:50-6:10 · 10 km allure 5:40-5:55 FC<75% · 10' retour au calme allure 6:00"
+- VMA   : "15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme allure 6:00"
+- Seuil : "15' échauffement allure 5:50-6:10 · 3x8' allure 4:45/km r2' · 10' retour au calme allure 6:00"
+- SL    : "10' échauffement · 18 km allure 5:40-6:00 progressive · 10' retour au calme"
+INTERDIT : "puis", "ensuite", virgules comme séparateur de phases. Seul le · est autorisé entre les 3 phases.`,
 
   // Envoie un message — ne sauvegarde PAS l'historique ici (géré dans app.js)
   async sendMessage(userMessage, systemOverride) {
@@ -287,9 +295,11 @@ CONSIGNES IMPORTANTES :
 - Si douleurs signalées → réduire l'intensité ou proposer récup active
 - Allures précises basées sur le niveau et les records
 
-RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) avec EXACTEMENT 2 semaines :
-{"weeks":[{"title":"Semaine du [date]","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 10 km allure 6:00-6:20 FC <75% · 5' retour au calme"},{"day":"Jeu","type":"tempo","label":"Tempo","detail":"15' échauffement · 4 km allure seuil 5:10-5:20 · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 18 km allure 6:10-6:30 · 5' retour au calme"}]},{"title":"Semaine du [date+7]","volume_km":0,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement · 11 km allure 6:00-6:20 FC <75% · 5' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement · 6x400m allure 4:30/km r1'30 · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 20 km allure 6:10-6:30 · 5' retour au calme"}]}]}
+RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) avec EXACTEMENT 2 semaines.
+Le champ "detail" doit OBLIGATOIREMENT utiliser le séparateur · entre les 3 phases (échauffement · travail · retour au calme). Aucun "puis" ni virgule entre les phases.
 
-Remplace avec un vrai plan personnalisé sur 2 semaines. Garde exactement cette structure JSON. Uniquement les jours d'entraînement, pas de repos. Le detail doit TOUJOURS avoir le format "échauffement · travail · retour au calme" séparé par ·`;
+{"weeks":[{"title":"Semaine du 09-06","volume_km":27,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 10 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 18 km allure 5:40-6:00 · 10' retour au calme"}]},{"title":"Semaine du 16-06","volume_km":29,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 11 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 7x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 20 km allure 5:40-6:00 · 10' retour au calme"}]}]}
+
+Remplace les valeurs par un plan personnalisé basé sur le profil. Respecte EXACTEMENT la structure et le séparateur ·.`;
   }
 };
