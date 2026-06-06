@@ -1,0 +1,662 @@
+// ui.js — Rendu des composants UI
+const UI = {
+  toast(msg, duration = 2500) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => el.classList.add('hidden'), duration);
+  },
+
+  modal(html, onClose) {
+    const overlay = document.getElementById('modal-overlay');
+    const box = document.getElementById('modal-box');
+    box.innerHTML = '<div class="modal-handle"></div>' + html;
+    overlay.classList.remove('hidden');
+    this._onModalClose = onClose;
+    overlay.onclick = (e) => { if (e.target === overlay) this.closeModal(); };
+  },
+
+  closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    if (this._onModalClose) this._onModalClose();
+  },
+
+  // ===== HOME =====
+  renderHome(profile, activities, plan) {
+    const el = document.getElementById('home-content');
+    const now = new Date();
+
+    // Countdown
+    let countdownHtml = '';
+    if (profile?.goal?.date) {
+      const target = new Date(profile.goal.date);
+      const days = Math.round((target - now) / 86400000);
+      const label = days > 0 ? `J−${days}` : 'Aujourd\'hui !';
+      countdownHtml = `
+        <div class="card" style="background: linear-gradient(135deg, #FDF0E8 0%, #fff 100%); margin-bottom: 12px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="text-align:center;min-width:64px;">
+              <div style="font-size:26px;font-weight:800;color:var(--orange);">${label}</div>
+              <div style="font-size:11px;color:var(--text-hint);">objectif</div>
+            </div>
+            <div style="border-left:1px solid var(--border);padding-left:14px;flex:1;">
+              <div style="font-size:15px;font-weight:700;">${profile.goal.name || 'Objectif'}</div>
+              <div style="font-size:13px;color:var(--text-muted);">${profile.goal.target ? 'Cible : ' + profile.goal.target : ''}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // Metrics from recent activities
+    let metricsHtml = '';
+    if (activities.length > 0) {
+      const last4 = activities.slice(0, 4);
+      const totalKm = last4.reduce((s, a) => s + a.distance, 0) / 1000;
+      const lastPace = Strava.formatPace(activities[0].average_speed);
+      const weekKm = activities
+        .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
+        .reduce((s, a) => s + a.distance, 0) / 1000;
+
+      metricsHtml = `
+        <div class="metrics-row">
+          <div class="metric-tile"><div class="metric-val">${weekKm.toFixed(0)}</div><div class="metric-label">km cette semaine</div></div>
+          <div class="metric-tile"><div class="metric-val">${lastPace}</div><div class="metric-label">dernière allure</div></div>
+          <div class="metric-tile"><div class="metric-val">${activities.length}</div><div class="metric-label">courses total</div></div>
+        </div>`;
+    }
+
+    // This week plan
+    let planHtml = '';
+    if (plan?.weeks?.[0]) {
+      const week = plan.weeks[0];
+      const typeMap = { ef: 'pill-ef', tempo: 'pill-tempo', vma: 'pill-vma', sl: 'pill-sl', rest: 'pill-rest', recup: 'pill-rest', test: 'pill-test' };
+      const labelMap = { ef: 'EF', tempo: 'Tempo', vma: 'VMA', sl: 'Sortie longue', rest: 'Repos', recup: 'Récup' };
+      const todayName = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][now.getDay()];
+
+      planHtml = `
+        <div class="section-header"><div class="section-title">Cette semaine</div><span class="volume-badge">${week.volume_km} km</span></div>
+        <div class="card" style="padding: 8px 14px;">
+          ${week.days.filter(d => d.type !== 'rest' && d.type !== 'recup').map(d => `
+            <div class="day-row">
+              <div class="day-name${d.day === todayName ? ' today' : ''}">${d.day}</div>
+              <div style="flex:1;">
+                <span class="session-pill ${typeMap[d.type] || 'pill-ef'}">${labelMap[d.type] || d.label}</span>
+                ${d.detail ? `<div class="session-detail" style="margin-top:3px;">${d.detail}</div>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>`;
+    } else {
+      planHtml = `
+        <div class="section-header"><div class="section-title">Plan d'entraînement</div></div>
+        <div class="card">
+          <div class="empty-state" style="padding:20px 0;">
+            <div class="empty-state-title">Pas encore de plan</div>
+            <div class="empty-state-sub">Connecte Strava et configure ton profil pour générer ton premier plan.</div>
+            <button class="btn-ghost" style="margin-top:12px;" onclick="App.generatePlan()">Générer mon plan →</button>
+          </div>
+        </div>`;
+    }
+
+    // Last activity
+    let lastActHtml = '';
+    if (activities.length > 0) {
+      const a = activities[0];
+      lastActHtml = `
+        <div class="section-header" style="margin-top:4px;"><div class="section-title">Dernière course</div></div>
+        ${this.renderActivityCard(a, true)}`;
+    }
+
+    el.innerHTML = countdownHtml + metricsHtml + planHtml + lastActHtml;
+  },
+
+  // ===== STRAVA TAB =====
+  renderStravaTab(isConnected, activities) {
+    const el = document.getElementById('strava-content');
+    const connectBanner = isConnected
+      ? `<div class="strava-connected-bar">
+           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+           <div><strong>Strava connecté</strong><br><span>${activities.length} courses synchronisées</span></div>
+         </div>`
+      : `<div class="strava-banner">
+           <svg class="strava-logo" viewBox="0 0 40 40" fill="white"><path d="M15 28.5l5-9.7 5 9.7h-3.1l-1.9-3.8-1.9 3.8H15zm-5-9.7l2 3.8H8L15 8l7 14.6h-4l-3-6.2-3 6.2H8.5l1.5-3.8z"/></svg>
+           <div class="strava-text"><strong>Connecte Strava</strong><span>Importe tes courses automatiquement</span></div>
+           <button class="strava-connect-btn" onclick="Strava.authorize()">Connecter</button>
+         </div>`;
+
+    const activityList = activities.length > 0
+      ? activities.map(a => this.renderActivityCard(a, true)).join('')
+      : `<div class="empty-state"><div class="empty-state-icon">🏃</div><div class="empty-state-title">Aucune course</div><div class="empty-state-sub">${isConnected ? 'Synchronise Strava pour importer tes courses.' : 'Connecte ton compte Strava pour commencer.'}</div></div>`;
+
+    el.innerHTML = `
+      ${connectBanner}
+      <div class="section-header" style="margin-top:4px;">
+        <div class="section-title">Courses</div>
+        ${isConnected ? `<button class="btn-ghost" onclick="App.syncStrava()">↻ Sync</button>` : ''}
+      </div>
+      ${activityList}`;
+  },
+
+  renderActivityCard(activity, withFeedback) {
+    const fb           = Storage.getFeedback(activity.id);
+    const feedbackHtml = withFeedback ? this.renderFeedbackForm(activity, fb) : '';
+    const hasFb        = !!fb;
+    const suffer       = activity.suffer_score || null;
+    const cadence      = activity.average_cadence ? Math.round(activity.average_cadence * 2) : null;
+
+    return `
+      <div class="act-card${hasFb ? ' has-feedback' : ''}" id="act-${activity.id}">
+        <div class="act-card-header" onclick="UI.toggleActivity(${activity.id})">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="act-card-title">${activity.name || 'Course'}</div>
+              ${hasFb ? '<span style="font-size:10px;background:var(--orange-light);color:var(--orange);padding:2px 6px;border-radius:10px;font-weight:600;">✓ Ressenti</span>' : ''}
+            </div>
+            <div class="act-card-date">${Strava.formatDate(activity.start_date_local)}</div>
+          </div>
+          <svg class="chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+
+        <!-- Stats principales -->
+        <div class="act-stats">
+          <div><div class="act-stat-val">${Strava.formatDistance(activity.distance)}</div><div class="act-stat-label">km</div></div>
+          <div><div class="act-stat-val">${Strava.formatDuration(activity.moving_time)}</div><div class="act-stat-label">durée</div></div>
+          <div><div class="act-stat-val">${Strava.formatPace(activity.average_speed)}</div><div class="act-stat-label">/km</div></div>
+          <div><div class="act-stat-val">${activity.average_heartrate ? Math.round(activity.average_heartrate) : '--'}</div><div class="act-stat-label">bpm moy</div></div>
+        </div>
+
+        <!-- Stats secondaires ligne 1 -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);padding:0 16px 8px;gap:4px;">
+          <div><div class="act-stat-val" style="font-size:13px;">${activity.total_elevation_gain ? Math.round(activity.total_elevation_gain)+'m' : '--'}</div><div class="act-stat-label">dénivelé</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${activity.max_heartrate || '--'}</div><div class="act-stat-label">FC max</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${cadence ? cadence+'/min' : '--'}</div><div class="act-stat-label">cadence</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${activity.calories ? Math.round(activity.calories)+' kcal' : '--'}</div><div class="act-stat-label">calories</div></div>
+        </div>
+        <!-- Stats secondaires ligne 2 -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);padding:0 16px 12px;gap:4px;border-bottom:0.5px solid var(--border);">
+          <div><div class="act-stat-val" style="font-size:13px;">${Strava.formatPace(activity.max_speed)}</div><div class="act-stat-label">allure max</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${suffer || '--'}</div><div class="act-stat-label">suffer</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${activity.average_temp !== undefined ? activity.average_temp+'°C' : '--'}</div><div class="act-stat-label">temp.</div></div>
+          <div><div class="act-stat-val" style="font-size:13px;">${activity.gear?.name ? activity.gear.name.slice(0,8) : '--'}</div><div class="act-stat-label">chaussures</div></div>
+        </div>
+
+        <!-- Détails étendus (chargés au clic) -->
+        <div id="detail-${activity.id}" style="display:none;padding:12px 16px;border-bottom:0.5px solid var(--border);">
+          <div style="font-size:12px;color:var(--text-hint);text-align:center;">Chargement des données détaillées...</div>
+        </div>
+
+        ${feedbackHtml}
+      </div>`;
+  },
+
+  // Charge et affiche les données détaillées d'une activité
+  async loadActivityDetail(id) {
+    const detailDiv = document.getElementById('detail-' + id);
+    if (!detailDiv) return;
+
+    // Évite de recharger si déjà affiché
+    if (detailDiv.dataset.loaded === '1') return;
+    detailDiv.style.display = 'block';
+
+    const detail = await Strava.fetchActivityDetail(id);
+    if (!detail) {
+      detailDiv.innerHTML = '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Données détaillées non disponibles</div>';
+      return;
+    }
+
+    const splits = detail.splits_metric || [];
+    const zones  = detail.zones || [];
+    const hrZone = zones.find(z => z.type === 'heartrate');
+    const zoneColors = ['#3B82F6','#22C55E','#EAB308','#F97316','#EF4444'];
+    const zoneNames  = ['Z1 Récup','Z2 Endurance','Z3 Tempo','Z4 Seuil','Z5 Max'];
+
+    // Splits
+    const splitsHtml = splits.length > 0 ? `
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Km par km</div>
+        ${splits.map((s, i) => {
+          const paceVal = s.average_speed ? 1000 / s.average_speed : 0;
+          const paceStr = paceVal > 0 ? Math.floor(paceVal/60) + ':' + String(Math.round(paceVal%60)).padStart(2,'0') : '--:--';
+          const elev    = s.elevation_difference || 0;
+          const elevStr = elev > 0 ? '+'+Math.round(elev)+'m' : Math.round(elev)+'m';
+          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--border);">
+            <div style="width:28px;font-size:12px;font-weight:700;color:var(--orange);">K${i+1}</div>
+            <div style="flex:1;font-size:13px;font-weight:500;">${paceStr}<span style="font-size:11px;color:var(--text-muted);">/km</span></div>
+            <div style="font-size:12px;color:var(--text-muted);">${s.average_heartrate ? Math.round(s.average_heartrate)+' bpm' : ''}</div>
+            <div style="font-size:11px;color:${elev > 0 ? 'var(--red)' : 'var(--green)'};">${elevStr}</div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
+    // Zones FC
+    const zonesHtml = hrZone?.distribution_buckets?.length > 0 ? `
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Zones cardiaques</div>
+        ${hrZone.distribution_buckets.map((b, i) => {
+          const totalTime = hrZone.distribution_buckets.reduce((s, bb) => s + bb.time, 0);
+          const pct = totalTime > 0 ? Math.round(b.time / totalTime * 100) : 0;
+          const mins = Math.round(b.time / 60);
+          return `<div style="margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="font-size:12px;color:${zoneColors[i]};">${zoneNames[i] || 'Zone '+(i+1)}</span>
+              <span style="font-size:12px;color:var(--text-muted);">${mins} min · ${pct}%</span>
+            </div>
+            <div style="height:4px;background:var(--bg3);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:${zoneColors[i]};border-radius:4px;"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
+    // Description Strava
+    const descHtml = detail.description ? `
+      <div style="margin-bottom:12px;padding:10px;background:var(--bg2);border-radius:var(--radius);">
+        <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px;">NOTE STRAVA</div>
+        <div style="font-size:13px;color:var(--text);">${detail.description}</div>
+      </div>` : '';
+
+    detailDiv.innerHTML = splitsHtml + zonesHtml + descHtml ||
+      '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Pas de données détaillées disponibles</div>';
+    detailDiv.dataset.loaded = '1';
+  },
+
+  renderFeedbackForm(activity, existing) {
+    const v   = existing || {};
+    const aid = activity.id;
+
+    // chip avec sauvegarde auto immédiate
+    const chip = (group, val, label, danger) => {
+      const isActive = v[group] === val;
+      const cls = isActive ? (danger ? ' danger' : ' active-soft') : '';
+      return `<div class="chip${cls}" onclick="UI.setFeedback(${aid},'${group}','${val}',this,${!!danger})">${label}</div>`;
+    };
+
+    return `
+      <div class="feedback-form" id="fb-${aid}">
+        <div class="feedback-title">📝 Ressenti de la séance</div>
+
+        <!-- Ressenti global -->
+        <div class="fb-section">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+            <span class="fb-label">Ressenti global</span>
+            <span style="font-size:22px;font-weight:700;color:var(--orange);" id="sv-${aid}">${v.effort ?? 3}</span>
+          </div>
+          <input type="range" min="1" max="5" step="1" value="${v.effort ?? 3}" style="width:100%;"
+            oninput="document.getElementById('sv-${aid}').textContent=this.value;UI.setFeedbackVal(${aid},'effort',+this.value)">
+          <div style="display:flex;justify-content:space-between;margin-top:4px;">
+            ${['1 – Très mauvaise','2 – Difficile','3 – Correcte','4 – Bonne','5 – Excellente'].map((l,i) =>
+              `<div style="text-align:center;width:18%;"><div style="font-size:13px;font-weight:700;color:var(--orange);">${i+1}</div><div style="font-size:9px;color:var(--text-hint);line-height:1.2;">${l.split(' – ')[1]}</div></div>`
+            ).join('')}
+          </div>
+        </div>
+
+        <!-- Cardio -->
+        <div class="fb-section">
+          <span class="fb-label">Ressenti cardio</span>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">À quel point ton cœur travaillait ?</div>
+          <div class="chips">
+            ${chip('cardio','easy','😌 Facile')}
+            ${chip('cardio','normal','🙂 Normal')}
+            ${chip('cardio','high','😤 Haut')}
+            ${chip('cardio','exploded','🔥 Explosé',true)}
+          </div>
+        </div>
+
+        <!-- Jambes -->
+        <div class="fb-section">
+          <span class="fb-label">État des jambes</span>
+          <div class="chips">
+            ${chip('legs','fresh','✨ Fraîches')}
+            ${chip('legs','normal','👌 Normales')}
+            ${chip('legs','heavy','🧱 Lourdes')}
+            ${chip('legs','pain','⚠️ Douleur',true)}
+          </div>
+        </div>
+
+        <!-- Douleurs localisées -->
+        <div class="fb-section">
+          <span class="fb-label">Douleurs / gênes ?</span>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Sélectionne tout ce qui s'applique</div>
+          <div class="chips" id="pain-chips-${aid}">
+            <div class="chip${(v.painAreas||[]).includes('knees') ? ' danger' : ''}"    onclick="UI.togglePainArea(${aid},'knees',this)">🦵 Genoux</div>
+            <div class="chip${(v.painAreas||[]).includes('calves') ? ' danger' : ''}"   onclick="UI.togglePainArea(${aid},'calves',this)">💪 Mollets</div>
+            <div class="chip${(v.painAreas||[]).includes('tendons') ? ' danger' : ''}"  onclick="UI.togglePainArea(${aid},'tendons',this)">🦶 Tendons</div>
+            <div class="chip${(v.painAreas||[]).includes('back') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'back',this)">🔙 Dos</div>
+            <div class="chip${(v.painAreas||[]).includes('hips') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'hips',this)">🍑 Hanches</div>
+            <div class="chip${(v.painAreas||[]).includes('none') ? ' active-soft' : ''}" onclick="UI.togglePainArea(${aid},'none',this)">✅ Aucune</div>
+          </div>
+          ${(v.painAreas||[]).filter(p => p !== 'none').length > 0 ? `
+          <textarea class="field-input field-textarea" style="margin-top:8px;min-height:50px;" placeholder="Décris la douleur (intensité, moment dans la course...)"
+            oninput="UI.setFeedbackVal(${aid},'painDetail',this.value)">${v.painDetail||''}</textarea>` : ''}
+        </div>
+
+        <!-- Mental -->
+        <div class="fb-section">
+          <span class="fb-label">État mental</span>
+          <div class="chips">
+            ${chip('mental','easy','😎 Facile')}
+            ${chip('mental','motivated','💪 Motivé')}
+            ${chip('mental','hard','😣 Dur')}
+            ${chip('mental','struggling','😤 En lutte')}
+          </div>
+        </div>
+
+        <!-- Conditions -->
+        <div class="fb-section">
+          <span class="fb-label">Conditions</span>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Météo</div>
+          <div class="chips" style="margin-bottom:10px;">
+            ${chip('weather','sunny','☀️ Beau')}
+            ${chip('weather','hot','🌡️ Chaud')}
+            ${chip('weather','cloudy','🌥 Nuageux')}
+            ${chip('weather','rain','🌧 Pluie')}
+            ${chip('weather','wind','💨 Vent')}
+            ${chip('weather','cold','🥶 Froid')}
+          </div>
+
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Sommeil la nuit précédente</div>
+          <div class="chips" style="margin-bottom:12px;">
+            ${chip('sleep','bad','😴 Mauvais',true)}
+            ${chip('sleep','ok','😐 Moyen')}
+            ${chip('sleep','good','😊 Bon')}
+            ${chip('sleep','great','🌟 Excellent')}
+          </div>
+
+          <div class="fb-section" style="margin-bottom:0;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+              <span class="fb-label" style="font-size:13px;">Fatigue avant la course</span>
+              <span style="font-size:18px;font-weight:700;color:var(--orange);" id="fv-${aid}">${v.fatigue ?? 2}</span>
+            </div>
+            <input type="range" min="1" max="5" step="1" value="${v.fatigue ?? 2}" style="width:100%;"
+              oninput="document.getElementById('fv-${aid}').textContent=this.value;UI.setFeedbackVal(${aid},'fatigue',+this.value)">
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+              ${['1 – Reposé','2 – Ok','3 – Moyen','4 – Fatigué','5 – Épuisé'].map((l,i) =>
+                `<div style="text-align:center;width:18%;"><div style="font-size:13px;font-weight:700;color:var(--orange);">${i+1}</div><div style="font-size:9px;color:var(--text-hint);line-height:1.2;">${l.split(' – ')[1]}</div></div>`
+              ).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Commentaire -->
+        <div class="fb-section">
+          <span class="fb-label">Commentaire libre</span>
+          <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Nutrition, contexte, sensations particulières, ce qui s'est passé...</div>
+          <textarea class="field-input field-textarea" placeholder="Tout ce qui peut aider le coach à comprendre cette séance..."
+            oninput="UI.setFeedbackVal(${aid},'comment',this.value)">${v.comment || ''}</textarea>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn-secondary" style="flex:1;" onclick="UI.saveFeedbackOnly(${aid})">💾 Sauvegarder</button>
+          <button class="btn-primary" style="flex:1;" onclick="App.analyzeActivity(${aid})">Analyser →</button>
+        </div>
+      </div>`;
+  },
+
+  saveFeedbackOnly(actId) {
+    const fb = Storage.getFeedback(actId);
+    if (fb) {
+      Storage.saveFeedback(actId, fb);
+      UI.toast('Ressenti sauvegardé ✓');
+      // Met à jour le badge sur la card
+      const card = document.getElementById('act-' + actId);
+      if (card) card.classList.add('has-feedback');
+    }
+  },
+
+  toggleActivity(id) {
+    const card = document.getElementById('act-' + id);
+    if (!card) return;
+    const isOpen = card.classList.contains('open');
+    if (isOpen) {
+      card.classList.remove('open');
+      // Cache le détail ET le feedback
+      const detailDiv = document.getElementById('detail-' + id);
+      const fbDiv     = document.getElementById('fb-' + id);
+      if (detailDiv) detailDiv.style.display = 'none';
+      if (fbDiv)     fbDiv.style.display = 'none';
+    } else {
+      card.classList.add('open');
+      // Réaffiche le feedback s'il existait
+      const fbDiv = document.getElementById('fb-' + id);
+      if (fbDiv) fbDiv.style.display = 'block';
+      this.loadActivityDetail(id);
+    }
+  },
+
+  _pendingFeedbacks: {},
+  setFeedback(actId, group, val, el, isDanger) {
+    const container = el.closest('.chips');
+    container.querySelectorAll('.chip').forEach(c => c.classList.remove('active-soft','danger','active'));
+    el.classList.add(isDanger ? 'danger' : 'active-soft');
+    this.setFeedbackVal(actId, group, val);
+  },
+
+  togglePainArea(actId, area, el) {
+    if (!this._pendingFeedbacks[actId]) {
+      this._pendingFeedbacks[actId] = { ...(Storage.getFeedback(actId) || {}) };
+    }
+    const fb = this._pendingFeedbacks[actId];
+    if (!fb.painAreas) fb.painAreas = [];
+
+    if (area === 'none') {
+      // Sélectionne "Aucune" et désélectionne tout le reste
+      fb.painAreas = ['none'];
+      document.querySelectorAll(`#pain-chips-${actId} .chip`).forEach(c => c.classList.remove('danger','active-soft'));
+      el.classList.add('active-soft');
+    } else {
+      // Retire "Aucune" si on sélectionne une zone
+      fb.painAreas = fb.painAreas.filter(p => p !== 'none');
+      document.querySelector(`#pain-chips-${actId} .chip:last-child`)?.classList.remove('active-soft');
+
+      const idx = fb.painAreas.indexOf(area);
+      if (idx > -1) {
+        fb.painAreas.splice(idx, 1);
+        el.classList.remove('danger');
+      } else {
+        fb.painAreas.push(area);
+        el.classList.add('danger');
+      }
+    }
+
+    Storage.saveFeedback(actId, fb);
+
+    // Affiche/masque le textarea de détail douleur
+    const formEl = document.getElementById('fb-' + actId);
+    const hasPain = fb.painAreas.some(p => p !== 'none');
+    const existingTA = formEl?.querySelector('.pain-detail-ta');
+    if (hasPain && !existingTA) {
+      const ta = document.createElement('textarea');
+      ta.className = 'field-input field-textarea pain-detail-ta';
+      ta.style.marginTop = '8px';
+      ta.style.minHeight = '50px';
+      ta.placeholder = 'Décris la douleur (intensité, moment dans la course...)';
+      ta.value = fb.painDetail || '';
+      ta.oninput = () => this.setFeedbackVal(actId, 'painDetail', ta.value);
+      document.getElementById('pain-chips-' + actId)?.after(ta);
+    } else if (!hasPain && existingTA) {
+      existingTA.remove();
+    }
+  },
+
+  setFeedbackVal(actId, key, val) {
+    if (!this._pendingFeedbacks[actId]) {
+      this._pendingFeedbacks[actId] = { ...(Storage.getFeedback(actId) || {}) };
+    }
+    this._pendingFeedbacks[actId][key] = val;
+    Storage.saveFeedback(actId, this._pendingFeedbacks[actId]);
+  },
+
+  // ===== PLAN TAB =====
+  renderPlanTab(plan, isLoading) {
+    const el = document.getElementById('plan-content');
+    if (isLoading) {
+      el.innerHTML = `<div class="loading-state"><div class="spinner"></div><div class="loading-text">Génération du plan en cours...</div></div>`;
+      return;
+    }
+    if (!plan?.weeks) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">📅</div>
+          <div class="empty-state-title">Pas encore de plan</div>
+          <div class="empty-state-sub">Configure ton profil et connecte Strava pour que ton coach génère un plan personnalisé.</div>
+          <button class="btn-primary" style="margin: 20px auto 0; max-width: 280px;" onclick="App.generatePlan()">Générer mon plan →</button>
+        </div>`;
+      return;
+    }
+
+    const typeClass = { ef: 'pill-ef', tempo: 'pill-tempo', vma: 'pill-vma', sl: 'pill-sl', rest: 'pill-rest', recup: 'pill-rest', test: 'pill-test' };
+    const now = new Date();
+    const todayName = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'][now.getDay()];
+
+    const weeksHtml = plan.weeks.map(week => `
+      <div>
+        <div class="week-header">
+          <div class="week-title">${week.title}</div>
+          <span class="volume-badge">${week.volume_km} km</span>
+        </div>
+        <div class="card" style="padding: 8px 14px;">
+          ${week.days.filter(d => d.type !== 'rest' && d.type !== 'recup').map(d => `
+            <div class="day-row">
+              <div class="day-name${d.day === todayName ? ' today' : ''}">${d.day}</div>
+              <div style="flex:1;">
+                <span class="session-pill ${typeClass[d.type] || 'pill-ef'}">${d.label}</span>
+                ${d.detail ? `<div class="session-detail" style="margin-top:3px;">${d.detail}</div>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <div class="section-header">
+        <div class="section-title">Plan d'entraînement</div>
+        <button class="btn-ghost" onclick="App.generatePlan()">↻ Recalculer</button>
+      </div>
+      ${weeksHtml}
+      <button class="btn-ghost" style="width:100%;margin-top:8px;text-align:center;" onclick="App.chatWithCoach('Explique-moi les détails de mon plan et les objectifs de chaque séance.')">Explications du plan →</button>`;
+  },
+
+  // ===== COACH TAB =====
+  renderCoachTab() {
+    const el = document.getElementById('coach-content');
+    const suggestions = [
+      'Quelle est mon allure cible pour mon objectif ?',
+      'Comment gérer la nutrition avant une longue sortie ?',
+      'Explique-moi les zones cardiaques',
+      'Suis-je en surmenage ?',
+      'Comment m\'étirer après l\'effort ?'
+    ];
+
+    el.innerHTML = `
+      <div class="chat-wrap">
+        <div class="chat-messages" id="chat-messages"></div>
+        <div>
+          <div class="chat-suggestions">
+            ${suggestions.map(s => `<button class="suggestion-btn" onclick="App.sendChat('${s.replace(/'/g,"\\'")}')">${s}</button>`).join('')}
+          </div>
+          <div class="chat-input-area">
+            <textarea class="chat-input" id="chat-input" rows="1" placeholder="Pose une question à ton coach..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();App.sendChat();}"></textarea>
+            <button class="chat-send" id="chat-send-btn" onclick="App.sendChat()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>`;
+
+    this.renderChatMessages();
+  },
+
+  renderChatMessages() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const history = Storage.getChatHistory();
+
+    if (history.length === 0) {
+      container.innerHTML = `
+        <div class="msg-row">
+          <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+          <div class="msg-bubble coach">Bonjour ! 👋 Je suis ton coach running. Configure ton profil et connecte Strava, et je pourrai analyser tes séances et t'aider à progresser. Qu'est-ce que je peux faire pour toi ?</div>
+        </div>`;
+    } else {
+      container.innerHTML = history.map(m => m.role === 'user'
+        ? `<div class="msg-row user"><div class="msg-bubble user">${this.escapeHtml(m.content)}</div></div>`
+        : `<div class="msg-row">
+             <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+             <div class="msg-bubble coach">${this.formatCoachMessage(m.content)}</div>
+           </div>`
+      ).join('');
+    }
+    container.scrollTop = container.scrollHeight;
+  },
+
+  addLoadingBubble() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const el = document.createElement('div');
+    el.className = 'msg-row';
+    el.id = 'loading-bubble';
+    el.innerHTML = `
+      <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
+      <div class="msg-bubble coach loading"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+    container.appendChild(el);
+    container.scrollTop = container.scrollHeight;
+  },
+
+  removeLoadingBubble() {
+    document.getElementById('loading-bubble')?.remove();
+  },
+
+  formatCoachMessage(text) {
+    return this.escapeHtml(text).replace(/\n/g, '<br>');
+  },
+
+  escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  },
+
+  // ===== SETTINGS TAB =====
+  renderSettings(profile) {
+    const el = document.getElementById('settings-content');
+    el.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-group-label">Objectifs</div>
+        <div class="settings-row" onclick="App.editProfile('goal')">
+          <span class="settings-label">Objectif principal</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="settings-value">${profile?.goal?.name || '—'}</span>
+            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+        <div class="settings-row" onclick="App.editProfile('prs')">
+          <span class="settings-label">Records personnels</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="settings-value">${profile?.prs?.km10 ? profile.prs.km10 : '—'}</span>
+            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-group-label">Planning</div>
+        <div class="settings-row" onclick="App.editProfile('schedule')">
+          <span class="settings-label">Jours d'entraînement</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="settings-value">${profile?.trainingDays?.join(', ') || '—'}</span>
+            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-group-label">Strava</div>
+        <div class="settings-row">
+          <span class="settings-label">Connexion Strava</span>
+          <span class="settings-value" style="color:${Strava.isConnected() ? 'var(--green)' : 'var(--orange)'};">${Strava.isConnected() ? '✓ Connecté' : 'Non connecté'}</span>
+        </div>
+        ${Strava.isConnected() ? `<div class="settings-row" onclick="App.disconnectStrava()"><span class="settings-label" style="color:var(--red);">Déconnecter Strava</span></div>` : `<div class="settings-row" onclick="Strava.authorize()"><span class="settings-label" style="color:var(--orange);">Connecter Strava</span></div>`}
+      </div>
+      <div class="settings-section">
+        <div class="settings-group-label">Compte</div>
+        <div class="settings-row" onclick="App.resetApp()">
+          <span class="settings-label" style="color:var(--red);">Réinitialiser l'app</span>
+        </div>
+      </div>`;
+  }
+};

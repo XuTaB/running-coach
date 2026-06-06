@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Coach Running">
+  <meta name="theme-color" content="#E8570A">
+  <title>Coach Running</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ONBOARDING (first launch) -->
+    <div id="screen-onboarding" class="screen">
+      <div class="onboard-wrap">
+        <div class="onboard-logo">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#E8570A"/><path d="M18 36 L24 22 L30 30 L34 24 L40 36" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="34" cy="20" r="3" fill="white"/></svg>
+        </div>
+        <h1>Coach Running</h1>
+        <p class="onboard-sub">Ton coach IA personnalisé,<br>connecté à Strava.</p>
+
+        <!-- Bouton principal : connexion Strava directe -->
+        <button class="btn-strava" onclick="App.loginWithStrava()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+          Se connecter avec Strava
+        </button>
+
+        <div class="onboard-divider"><span>première fois ?</span></div>
+
+        <!-- Nouveau compte : wizard complet -->
+        <button class="btn-secondary" style="width:100%;max-width:320px;justify-content:center;" onclick="App.startOnboarding()">
+          Créer mon profil coach →
+        </button>
+
+        <p class="onboard-hint" style="margin-top:16px;">La connexion Strava est requise pour<br>importer tes courses automatiquement.</p>
+      </div>
+    </div>
+
+    <!-- SETUP WIZARD -->
+    <div id="screen-setup" class="screen">
+      <div class="setup-header">
+        <div class="progress-bar"><div class="progress-fill" id="setup-progress"></div></div>
+        <span class="setup-step-label" id="setup-step-label">Étape 1 / 5</span>
+      </div>
+      <div id="setup-content" class="setup-content"></div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="screen-main" class="screen">
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <div class="avatar" id="user-avatar">T</div>
+          <div>
+            <div class="top-name" id="user-name">Thomas</div>
+            <div class="top-sub" id="countdown-label">J−310 · Paris 2026</div>
+          </div>
+        </div>
+        <div class="top-bar-right">
+          <button class="icon-btn" onclick="App.syncStrava()" title="Synchroniser Strava">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </button>
+          <button class="icon-btn" id="dark-toggle" onclick="App.toggleDark()" title="Mode sombre">
+            <svg id="dark-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg id="light-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+          <button class="icon-btn" onclick="App.showTab('settings')" title="Paramètres">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-home">
+        <div id="home-content"></div>
+      </div>
+      <div class="tab-content hidden" id="tab-strava">
+        <div id="strava-content"></div>
+      </div>
+      <div class="tab-content hidden" id="tab-plan">
+        <div id="plan-content"></div>
+      </div>
+      <div class="tab-content hidden" id="tab-coach">
+        <div id="coach-content"></div>
+      </div>
+      <div class="tab-content hidden" id="tab-settings">
+        <div id="settings-content"></div>
+      </div>
+
+      <nav class="bottom-nav">
+        <button class="nav-item active" onclick="App.showTab('home')" data-tab="home">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>Accueil</span>
+        </button>
+        <button class="nav-item" onclick="App.showTab('strava')" data-tab="strava">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>Courses</span>
+        </button>
+        <button class="nav-item" onclick="App.showTab('plan')" data-tab="plan">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Plan</span>
+        </button>
+        <button class="nav-item" onclick="App.showTab('coach')" data-tab="coach">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Coach</span>
+        </button>
+      </nav>
+    </div>
+
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal-box" class="modal-box"></div>
+  </div>
+
+  <script src="/js/version.js"></script>
+  <script src="/js/storage.js"></script>
+  <script src="/js/strava.js"></script>
+  <script src="/js/coach.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/setup.js"></script>
+  <script src="/js/app.js"></script>
+
+  <!-- Badge version — toujours visible -->
+  <div id="version-badge" style="
+    position: fixed; bottom: 12px; right: 12px; z-index: 9999;
+    background: rgba(0,0,0,0.18); color: #fff;
+    font-size: 11px; font-family: monospace;
+    padding: 3px 8px; border-radius: 20px;
+    pointer-events: none; letter-spacing: 0.03em;
+  ">v1.0.6</div>
+</body>
+</html>
