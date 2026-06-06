@@ -321,7 +321,12 @@ app.post('/api/coach/chat', async (req, res) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: truncated }] }],
-          generationConfig: { maxOutputTokens: 8192, temperature: 0.7, topP: 0.9 }
+          generationConfig: {
+            maxOutputTokens: 8192,
+            temperature: 0.7,
+            topP: 0.9,
+            thinkingConfig: { thinkingBudget: 0 }  // désactive le thinking — inutile ici et évite les parts[0] vides
+          }
         })
       }
     );
@@ -330,8 +335,13 @@ app.post('/api/coach/chat', async (req, res) => {
       console.error('[COACH] Erreur Gemini:', geminiData?.error?.message);
       return res.status(502).json({ error: 'Erreur Gemini', details: geminiData?.error?.message });
     }
-    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return res.status(502).json({ error: 'Réponse vide Gemini' });
+    // Gemini 2.5 Flash peut renvoyer plusieurs parts (thinking + réponse) — on cherche la vraie réponse texte
+    const parts = geminiData.candidates?.[0]?.content?.parts || [];
+    const text = (parts.find(p => p.text && !p.thought) || parts[0])?.text;
+    if (!text) {
+      console.error('[COACH] Réponse vide. Parts reçus:', JSON.stringify(parts).slice(0, 200));
+      return res.status(502).json({ error: 'Réponse vide Gemini' });
+    }
     res.json({ content: [{ type: 'text', text }] });
   } catch (err) {
     res.status(500).json({ error: err.message });
