@@ -1285,11 +1285,12 @@ const UI = {
   renderCoachTab() {
     const el = document.getElementById('coach-content');
     const suggestions = [
-      'Quelle est mon allure cible pour mon objectif ?',
-      'Comment gérer la nutrition avant une longue sortie ?',
-      'Explique-moi les zones cardiaques',
-      'Suis-je en surmenage ?',
-      'Comment m\'étirer après l\'effort ?'
+      '🎯 Quelle est mon allure cible ?',
+      '📊 Analyse ma charge récente',
+      '🫀 Explique mes zones cardiaques',
+      '⚠️ Suis-je en surmenage ?',
+      '🍌 Nutrition avant une longue sortie',
+      '🦵 Étirements après l\'effort'
     ];
 
     el.innerHTML = `
@@ -1320,7 +1321,7 @@ const UI = {
       container.innerHTML = `
         <div class="msg-row">
           <div class="msg-avatar"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
-          <div class="msg-bubble coach">Bonjour ! 👋 Je suis ton coach running. Configure ton profil et connecte Strava, et je pourrai analyser tes séances et t'aider à progresser. Qu'est-ce que je peux faire pour toi ?</div>
+          <div class="msg-bubble coach">👋 Je suis ton coach running personnel. Je peux analyser tes séances Strava, ajuster ton plan selon ta fatigue et ton contexte, et répondre à toutes tes questions. Par quoi on commence ?</div>
         </div>`;
     } else {
       container.innerHTML = history.map(m => m.role === 'user'
@@ -1352,7 +1353,112 @@ const UI = {
   },
 
   formatCoachMessage(text) {
-    return this.escapeHtml(text).replace(/\n/g, '<br>');
+    // 1. Extrait le JSON plan s'il est présent et le remplace par un rendu visuel
+    let planHtml = '';
+    const jsonStart = text.indexOf('{"weeks"');
+    if (jsonStart !== -1) {
+      const jsonEnd = text.lastIndexOf('}');
+      if (jsonEnd > jsonStart) {
+        try {
+          const jsonStr = text.slice(jsonStart, jsonEnd + 1);
+          const plan    = JSON.parse(jsonStr);
+          if (plan.weeks && Array.isArray(plan.weeks)) {
+            planHtml = this._renderInlinePlan(plan);
+            text = text.slice(0, jsonStart).trimEnd() + text.slice(jsonEnd + 1).trimStart();
+          }
+        } catch(e) {}
+      }
+    }
+
+    // 2. Traitement ligne par ligne
+    const lines  = text.split('\n');
+    const parts  = [];
+    let listBuf  = [];   // buffer pour les listes en cours
+    let numBuf   = [];
+
+    const flushList = () => {
+      if (listBuf.length) { parts.push('<ul class="coach-list">' + listBuf.join('') + '</ul>'); listBuf = []; }
+      if (numBuf.length)  { parts.push('<ol class="coach-list">'  + numBuf.join('')  + '</ol>'); numBuf = []; }
+    };
+
+    lines.forEach(raw => {
+      const line = raw.trim();
+      if (!line) { flushList(); parts.push('<div class="coach-spacer"></div>'); return; }
+
+      // Titre de section (ligne qui commence par emoji ou par **)
+      if (/^(#{1,3}\s|(\*\*[^*]+\*\*\s*:?\s*$))/.test(line) ||
+          /^[\u{1F300}-\u{1FFFF}]|^[📊✅⚠️🎯💪🫀🦵🧠🌡️📅⚡🔴🟢🔵]/u.test(line)) {
+        flushList();
+        const cleaned = line.replace(/^#{1,3}\s/, '').replace(/\*\*/g, '');
+        parts.push('<div class="coach-section-title">' + this.escapeHtml(cleaned) + '</div>');
+        return;
+      }
+
+      // Liste à puces (- ou •)
+      const bulletMatch = line.match(/^[-•]\s+(.+)/);
+      if (bulletMatch) {
+        numBuf.length && flushList();
+        listBuf.push('<li>' + this._formatInline(bulletMatch[1]) + '</li>');
+        return;
+      }
+
+      // Liste numérotée (1. 2. etc.)
+      const numMatch = line.match(/^(\d+)\.\s+(.+)/);
+      if (numMatch) {
+        listBuf.length && flushList();
+        numBuf.push('<li>' + this._formatInline(numMatch[2]) + '</li>');
+        return;
+      }
+
+      // Ligne normale
+      flushList();
+      parts.push('<p class="coach-p">' + this._formatInline(line) + '</p>');
+    });
+
+    flushList();
+
+    // 3. Ajoute le plan rendu si présent
+    if (planHtml) parts.push(planHtml);
+
+    return parts.join('');
+  },
+
+  // Formatte le texte inline : **gras**, allures en orange
+  _formatInline(text) {
+    return this.escapeHtml(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code class="coach-code">$1</code>')
+      // Allures (ex: 5:30/km) en couleur orange
+      .replace(/(\d:\d{2}(?:-\d:\d{2})?\/km)/g, '<span class="coach-pace">$1</span>')
+      // FC (ex: FC&lt;75% ou 145bpm)
+      .replace(/(FC[<>]?\d+%?|\d{2,3}\s*bpm)/g, '<span class="coach-hr">$1</span>');
+  },
+
+  // Rendu compact d'un plan JSON dans le chat
+  _renderInlinePlan(plan) {
+    const typeClass = {ef:'pill-ef',work:'pill-vma',vma:'pill-vma',sl:'pill-sl',tempo:'pill-tempo',recup:'pill-rest',free:'pill-ef'};
+    let html = '<div class="coach-plan-block">';
+    plan.weeks.forEach(function(week, wi) {
+      html += '<div class="coach-plan-week">'
+        + '<div class="coach-plan-week-title">' + (week.title || 'Semaine ' + (wi+1))
+        + '<span class="volume-badge">' + (week.volume_km || '?') + ' km</span></div>';
+      var order = {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6};
+      var days  = (week.days || []).slice().sort(function(a,b){ return (order[a.day]||7)-(order[b.day]||7); });
+      days.forEach(function(d) {
+        var tc = typeClass[d.type] || 'pill-ef';
+        var detail = d.detail ? d.detail.split('·')[0].trim() : '';  // Juste la 1ère phase pour la compacité
+        if (d.type === 'ef' || d.type === 'sl' || d.type === 'recup' || d.type === 'free') detail = d.detail || '';
+        html += '<div class="coach-plan-day">'
+          + '<span class="coach-plan-dayname">' + d.day + '</span>'
+          + '<div style="flex:1;">'
+          + '<span class="session-pill ' + tc + '" style="font-size:11px;padding:2px 8px;">' + d.label + '</span>'
+          + (detail ? '<div class="coach-plan-detail">' + detail + '</div>' : '')
+          + '</div></div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
   },
 
   escapeHtml(str) {

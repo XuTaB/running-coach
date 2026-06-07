@@ -404,6 +404,51 @@ input[type=range]::-moz-range-thumb {
 }
 .suggestion-btn:hover { background: #f9e4d5; }
 
+/* ===== COACH MESSAGE RICH FORMAT ===== */
+.coach-section-title {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  margin: 10px 0 4px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.coach-p {
+  margin: 3px 0; font-size: 14px; line-height: 1.6;
+}
+.coach-spacer { height: 6px; }
+.coach-list {
+  margin: 4px 0 4px 4px; padding-left: 18px; font-size: 14px; line-height: 1.7;
+}
+.coach-list li { margin-bottom: 2px; }
+.coach-code {
+  background: var(--bg2); border-radius: 4px; padding: 1px 5px;
+  font-size: 12px; font-family: monospace; color: var(--orange);
+}
+.coach-pace { color: var(--orange); font-weight: 600; }
+.coach-hr   { color: #E05050; font-weight: 600; }
+
+/* Plan rendu dans le chat */
+.coach-plan-block {
+  margin-top: 10px; border-radius: 12px; overflow: hidden;
+  border: 0.5px solid var(--border); background: var(--bg2);
+}
+.coach-plan-week { padding: 10px 12px; border-bottom: 0.5px solid var(--border); }
+.coach-plan-week:last-child { border-bottom: none; }
+.coach-plan-week-title {
+  font-size: 12px; font-weight: 700; color: var(--orange);
+  margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+}
+.coach-plan-day {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 5px 0; border-bottom: 0.5px solid var(--border);
+}
+.coach-plan-day:last-child { border-bottom: none; }
+.coach-plan-dayname {
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
+  min-width: 28px; padding-top: 3px;
+}
+.coach-plan-detail {
+  font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.4;
+}
+
 /* ===== PLAN VIEW ===== */
 .week-header {
   display: flex; align-items: center; justify-content: space-between;
