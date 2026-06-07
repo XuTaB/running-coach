@@ -226,7 +226,7 @@ const UI = {
     var lastX  = xOf(altPts[altPts.length - 1].d).toFixed(1);
     var firstX = xOf(altPts[0].d).toFixed(1);
     return '<path d="' + pathD + ' L' + lastX + ',' + bottom + ' L' + firstX + ',' + bottom + ' Z"'
-      + ' fill="rgba(90,140,200,0.12)" stroke="rgba(90,140,200,0.35)" stroke-width="0.8"/>';
+      + ' fill="rgba(90,140,200,0.22)" stroke="rgba(90,140,200,0.60)" stroke-width="1.2"/>';
   },
 
   // Routeur principal
@@ -322,14 +322,21 @@ const UI = {
         + ' font-size="9" fill="rgba(128,128,128,0.7)">' + km + 'km</text>';
     }
 
+    // Helpers arrondi propre
+    var fmtPaceR = function(sec) {
+      var r = Math.round(sec / 5) * 5;
+      var m = Math.floor(r / 60), s = r % 60;
+      return m + ':' + (s < 10 ? '0' + s : '' + s);
+    };
+    var fmtHRR = function(bpm) { return Math.round(bpm / 5) * 5; };
+
     // Labels allure (gauche)
     var pLabelSvg = '';
     [pMin, (pMin + pMax) / 2, pMax].forEach(function(p) {
-      var m = Math.floor(p / 60), s = Math.round(p % 60);
       var y = yPace(p).toFixed(1);
       pLabelSvg += '<text x="' + (PAD.left - 3) + '" y="' + y + '" text-anchor="end"'
         + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">'
-        + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
+        + fmtPaceR(p) + '</text>';
     });
 
     // Labels FC (droite)
@@ -338,7 +345,7 @@ const UI = {
       [hrMin, Math.round((hrMin + hrMax) / 2), hrMax].forEach(function(h) {
         var y = yHR(h).toFixed(1);
         hrLabelSvg += '<text x="' + (W - PAD.right + 4) + '" y="' + y + '"'
-          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + Math.round(h) + '</text>';
+          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + fmtHRR(h) + '</text>';
       });
     }
 
@@ -386,131 +393,164 @@ const UI = {
       + '</div>';
   },
 
-  // ── Vue fractionné : bâtons par tour + courbe FC + dénivelé ──────────────
+  // ── Vue fractionné : bâtons par tour + courbe FC stream + dénivelé ─────────
   _renderLapChart(detail, laps, streams) {
     if (laps.length < 2) return this._renderContinuousChart(detail, streams);
 
-    var W = 600, H = 140;
-    var PAD = { top: 10, right: 38, bottom: 24, left: 40 };
+    var W = 600, H = 148;
+    var PAD = { top: 18, right: 38, bottom: 22, left: 40 };  // top=18 pour numéros de tour
     var cW = W - PAD.left - PAD.right;
     var cH = H - PAD.top  - PAD.bottom;
 
     var totalDist = laps.reduce(function(s, l) { return s + (l.distance || 0); }, 0) || 1;
+    var xOf = function(d) { return PAD.left + (Math.min(d, totalDist) / totalDist) * cW; };
 
     // Vitesses et allures par tour
     var lapSpeeds = laps.map(function(l) { return l.average_speed || 0; });
     var lapPaces  = lapSpeeds.map(function(v) { return v > 0.3 ? 1000 / v : null; });
-    var lapHRs    = laps.map(function(l) { return l.average_heartrate || null; });
 
     var validSpeeds = lapSpeeds.filter(Boolean);
     if (!validSpeeds.length) return this._renderContinuousChart(detail, streams);
-    var sMin = Math.min.apply(null, validSpeeds);
-    var sMax = Math.max.apply(null, validSpeeds);
-    var sRange = sMax - sMin || 0.1;
+    var sMin    = Math.min.apply(null, validSpeeds);
+    var sMax    = Math.max.apply(null, validSpeeds);
+    var sRange  = sMax - sMin || 0.1;
+    var avgSpd  = (sMin + sMax) / 2;
 
-    // FC
-    var validHR = lapHRs.filter(Boolean);
-    var hrMin   = validHR.length ? Math.max(80,  Math.min.apply(null, validHR) - 10) : 100;
-    var hrMax   = validHR.length ? Math.min(220, Math.max.apply(null, validHR) + 10) : 200;
+    // Détection échauffement : premiers tours sous la moyenne avant le 1er tour rapide
+    var firstWorkIdx = -1;
+    for (var k = 0; k < lapSpeeds.length; k++) {
+      if (lapSpeeds[k] > avgSpd) { firstWorkIdx = k; break; }
+    }
+    var hasWarmup = firstWorkIdx > 0;
+
+    // FC depuis le stream continu (bien plus de détail que les moyennes par tour)
+    var hrStreamData = (streams.heartrate && streams.heartrate.data) || [];
+    var hrDistData   = (streams.distance  && streams.distance.data)  || [];
+    var validHRS = hrStreamData.filter(Boolean);
+    var hrMin = validHRS.length ? Math.max(80,  Math.min.apply(null, validHRS) - 5)  : 100;
+    var hrMax = validHRS.length ? Math.min(220, Math.max.apply(null, validHRS) + 5)  : 200;
     var hrRange = hrMax - hrMin || 100;
-    var yHR     = function(h) { return PAD.top + cH - ((h - hrMin) / hrRange) * cH; };
+    var yHR = function(h) { return PAD.top + cH - ((h - hrMin) / hrRange) * cH; };
 
-    // Dénivelé
+    // Helpers arrondi propre
+    var fmtPaceR = function(sec) {
+      var r = Math.round(sec / 5) * 5;
+      var m = Math.floor(r / 60), s = r % 60;
+      return m + ':' + (s < 10 ? '0' + s : '' + s);
+    };
+    var fmtHRR = function(bpm) { return Math.round(bpm / 5) * 5; };
+
+    // Dénivelé en fond
     var elevSvg = this._elevSvg(streams, totalDist, PAD, cW, cH, W, H);
 
-    // Bâtons (largeur proportionnelle à la distance du tour)
+    // ── Bâtons ────────────────────────────────────────────────────────────────
     var GUTTER  = 3;
-    var barsSvg = '', hrPts = [], labelsSvg = '';
+    var BARSCALE = 0.82;  // fraction de cH utilisée pour le bâton le plus haut
+    var barsSvg = '', labelsSvg = '';
     var xCursor = 0;
 
     laps.forEach(function(lap, idx) {
       var speed  = lapSpeeds[idx];
       var pace   = lapPaces[idx];
-      var hr     = lapHRs[idx];
-      var barX   = PAD.left + (xCursor / totalDist) * cW;
+      var barX   = xOf(xCursor);
       var barW   = (lap.distance / totalDist) * cW;
       var barInW = Math.max(1, barW - GUTTER);
 
-      // Hauteur proportionnelle à la vitesse (rapide = haut)
-      var barH = sRange > 0 ? ((speed - sMin) / sRange) * cH * 0.85 : cH * 0.4;
+      var barH = sRange > 0 ? ((speed - sMin) / sRange) * cH * BARSCALE : cH * 0.4;
       barH = Math.max(3, barH);
       var barY = PAD.top + cH - barH;
 
-      // Couleur : tour rapide = orange / tour lent = gris
-      var avgSpeed = (sMin + sMax) / 2;
-      var color = speed > avgSpeed ? 'rgba(249,115,22,0.82)' : 'rgba(150,150,160,0.45)';
+      // Couleur : échauffement=bleu / travail=orange / récup=gris
+      var color;
+      if (hasWarmup && idx < firstWorkIdx) {
+        color = 'rgba(59,130,246,0.68)';
+      } else if (speed > avgSpd) {
+        color = 'rgba(249,115,22,0.85)';
+      } else {
+        color = 'rgba(150,150,160,0.48)';
+      }
 
       barsSvg += '<rect x="' + (barX + GUTTER / 2).toFixed(1) + '" y="' + barY.toFixed(1) + '"'
         + ' width="' + barInW.toFixed(1) + '" height="' + barH.toFixed(1) + '"'
         + ' rx="2" fill="' + color + '"/>';
 
-      // Allure au centre du bâton (si assez large)
-      if (barW > 22 && pace) {
-        var m = Math.floor(pace / 60), s = Math.round(pace % 60);
-        var px = (barX + barW / 2).toFixed(1);
-        var py = (barY + Math.min(barH / 2, 14) + 3).toFixed(1);
-        labelsSvg += '<text x="' + px + '" y="' + py + '" text-anchor="middle"'
-          + ' font-size="8" fill="rgba(255,255,255,0.92)">'
-          + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
+      // Allure dans le bâton (centré, si assez large et haut)
+      if (barW > 20 && pace && barH > 14) {
+        var py = (barY + Math.min(barH * 0.55, 12) + 4).toFixed(1);
+        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + py + '"'
+          + ' text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.93)">' + fmtPaceR(pace) + '</text>';
       }
 
-      // Numéro de tour en bas
+      // Numéro de tour EN HAUT (ligne fixe au-dessus de la zone graphique)
+      if (barW > 10) {
+        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + (PAD.top - 5) + '"'
+          + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.85)">' + (idx + 1) + '</text>';
+      }
+
+      // Distance cumulée en bas
+      var cumDist = xCursor + lap.distance;
       if (barW > 14) {
-        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + (H - 6) + '"'
-          + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.75)">' + (idx + 1) + '</text>';
+        var distLbl = cumDist >= 1000
+          ? (cumDist / 1000).toFixed(1) + 'km'
+          : Math.round(cumDist) + 'm';
+        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + (H - 5) + '"'
+          + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.7)">' + distLbl + '</text>';
       }
-
-      // Point FC au centre du bâton
-      if (hr) hrPts.push({ x: barX + barW / 2, y: yHR(hr) });
 
       xCursor += lap.distance;
     });
 
-    // Courbe FC (ligne + points)
-    var hrLineSvg = '';
-    if (hrPts.length > 1) {
-      var hrD = hrPts.map(function(p, idx) {
-        return (idx === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
-      }).join(' ');
-      hrLineSvg = '<path d="' + hrD + '" fill="none" stroke="rgba(239,68,68,0.85)"'
-        + ' stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="4,2"/>';
-      hrPts.forEach(function(p) {
-        hrLineSvg += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1)
-          + '" r="2.5" fill="rgba(239,68,68,0.9)"/>';
-      });
+    // ── Courbe FC stream continu ───────────────────────────────────────────────
+    var hrStreamSvg = '';
+    if (hrStreamData.length > 5 && hrDistData.length > 5) {
+      var hStep = Math.max(1, Math.floor(hrStreamData.length / 350));
+      var hrPath = '', prevOk = false;
+      for (var i = 0; i < hrStreamData.length; i += hStep) {
+        var hv = hrStreamData[i], hd = hrDistData[i];
+        if (!hv || hd === undefined) { prevOk = false; continue; }
+        var hx = xOf(hd).toFixed(1);
+        var hy = yHR(hv).toFixed(1);
+        hrPath += (prevOk ? 'L' : 'M') + hx + ',' + hy + ' ';
+        prevOk = true;
+      }
+      if (hrPath) {
+        hrStreamSvg = '<path d="' + hrPath + '" fill="none" stroke="rgba(239,68,68,0.88)"'
+          + ' stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>';
+      }
     }
 
-    // Labels Y allure (gauche) : min/mid/max vitesse → allure
+    // ── Labels Y allure (gauche) ───────────────────────────────────────────────
     var pLabelSvg = '';
-    var speedToBarTopY = function(speed) {
-      var h = sRange > 0 ? ((speed - sMin) / sRange) * cH * 0.85 : cH * 0.4;
+    var speedToY = function(sp) {
+      var h = sRange > 0 ? ((sp - sMin) / sRange) * cH * BARSCALE : cH * 0.4;
       return PAD.top + cH - Math.max(3, h);
     };
     [sMin, (sMin + sMax) / 2, sMax].forEach(function(sp) {
       if (!sp) return;
-      var pace = 1000 / sp;
-      var m = Math.floor(pace / 60), s = Math.round(pace % 60);
-      var y = speedToBarTopY(sp).toFixed(1);
+      var y = speedToY(sp).toFixed(1);
       pLabelSvg += '<text x="' + (PAD.left - 3) + '" y="' + y + '" text-anchor="end"'
         + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">'
-        + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
+        + fmtPaceR(1000 / sp) + '</text>';
     });
 
-    // Labels Y FC (droite)
+    // ── Labels Y FC (droite) ───────────────────────────────────────────────────
     var hrLabelSvg = '';
-    if (hrPts.length > 1) {
+    if (hrStreamSvg) {
       [hrMin, Math.round((hrMin + hrMax) / 2), hrMax].forEach(function(h) {
         var y = yHR(h).toFixed(1);
         hrLabelSvg += '<text x="' + (W - PAD.right + 4) + '" y="' + y + '"'
-          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + Math.round(h) + '</text>';
+          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + fmtHRR(h) + '</text>';
       });
     }
 
-    // Légende
-    var legendParts = ['<span style="color:rgba(249,115,22,0.95);font-weight:600;">█ Allure / tour</span>'];
-    if (hrPts.length > 1) legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">--- FC moy</span>');
-    if (elevSvg)          legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
-    var legend = '<div style="display:flex;gap:14px;margin-bottom:5px;font-size:11px;">' + legendParts.join('') + '</div>';
+    // ── Légende ────────────────────────────────────────────────────────────────
+    var legendParts = [];
+    if (hasWarmup) legendParts.push('<span style="color:rgba(59,130,246,0.9);font-weight:600;">█ Échauff.</span>');
+    legendParts.push('<span style="color:rgba(249,115,22,0.95);font-weight:600;">█ Travail</span>');
+    legendParts.push('<span style="color:rgba(150,150,160,0.85);">█ Récup</span>');
+    if (hrStreamSvg) legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">— FC</span>');
+    if (elevSvg)     legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
+    var legend = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:5px;font-size:11px;">' + legendParts.join('') + '</div>';
 
     return '<div style="margin-bottom:14px;">'
       + '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;'
@@ -518,7 +558,7 @@ const UI = {
       + legend
       + '<div style="background:var(--bg2);border-radius:8px;padding:6px;overflow:hidden;">'
       + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" preserveAspectRatio="xMidYMid meet">'
-      + elevSvg + barsSvg + hrLineSvg + pLabelSvg + hrLabelSvg + labelsSvg
+      + elevSvg + barsSvg + hrStreamSvg + pLabelSvg + hrLabelSvg + labelsSvg
       + '</svg>'
       + '</div>'
       + '</div>';
