@@ -487,18 +487,29 @@ const UI = {
           + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.85)">' + (idx + 1) + '</text>';
       }
 
-      // Distance cumulée en bas
-      var cumDist = xCursor + lap.distance;
-      if (barW > 14) {
-        var distLbl = cumDist >= 1000
-          ? (cumDist / 1000).toFixed(1) + 'km'
-          : Math.round(cumDist) + 'm';
-        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + (H - 5) + '"'
-          + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.7)">' + distLbl + '</text>';
-      }
-
       xCursor += lap.distance;
     });
+
+    // ── Axe km en bas : graduation tous les 500m, label tous les 1km ──────────
+    var xAxisSvg = '';
+    var totalKm   = totalDist / 1000;
+    var axisY     = PAD.top + cH;
+    for (var km500 = 0; km500 <= Math.ceil(totalKm * 2); km500++) {
+      var distM  = km500 * 500;
+      if (distM > totalDist + 50) break;
+      var tickX  = xOf(distM);
+      var isKm   = km500 % 2 === 0;
+      // Petite graduation verticale
+      xAxisSvg += '<line x1="' + tickX.toFixed(1) + '" y1="' + axisY
+        + '" x2="' + tickX.toFixed(1) + '" y2="' + (axisY + (isKm ? 4 : 2)) + '"'
+        + ' stroke="rgba(128,128,128,' + (isKm ? '0.5' : '0.25') + ')" stroke-width="1"/>';
+      // Label km (pas le 0)
+      if (isKm && km500 > 0) {
+        xAxisSvg += '<text x="' + tickX.toFixed(1) + '" y="' + (H - 4) + '"'
+          + ' text-anchor="middle" font-size="9" fill="rgba(128,128,128,0.75)">'
+          + (km500 / 2) + 'km</text>';
+      }
+    }
 
     // ── Courbe FC stream continu ───────────────────────────────────────────────
     var hrStreamSvg = '';
@@ -558,7 +569,7 @@ const UI = {
       + legend
       + '<div style="background:var(--bg2);border-radius:8px;padding:6px;overflow:hidden;">'
       + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" preserveAspectRatio="xMidYMid meet">'
-      + elevSvg + barsSvg + hrStreamSvg + pLabelSvg + hrLabelSvg + labelsSvg
+      + elevSvg + barsSvg + hrStreamSvg + xAxisSvg + pLabelSvg + hrLabelSvg + labelsSvg
       + '</svg>'
       + '</div>'
       + '</div>';
