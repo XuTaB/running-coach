@@ -27,43 +27,42 @@ const UI = {
     const el = document.getElementById('home-content');
     const now = new Date();
 
-    // Countdown
-    let countdownHtml = '';
-    if (profile?.goal?.date) {
-      const target = new Date(profile.goal.date);
-      const days = Math.round((target - now) / 86400000);
-      const label = days > 0 ? `J−${days}` : 'Aujourd\'hui !';
-      countdownHtml = `
-        <div class="card" style="background: linear-gradient(135deg, #FDF0E8 0%, #fff 100%); margin-bottom: 12px;">
-          <div style="display:flex;align-items:center;gap:14px;">
-            <div style="text-align:center;min-width:64px;">
-              <div style="font-size:26px;font-weight:800;color:var(--orange);">${label}</div>
-              <div style="font-size:11px;color:var(--text-hint);">objectif</div>
-            </div>
-            <div style="border-left:1px solid var(--border);padding-left:14px;flex:1;">
-              <div style="font-size:15px;font-weight:700;">${profile.goal.name || 'Objectif'}</div>
-              <div style="font-size:13px;color:var(--text-muted);">${profile.goal.target ? 'Cible : ' + profile.goal.target : ''}</div>
-            </div>
-          </div>
-        </div>`;
-    }
-
     // Metrics from recent activities
     let metricsHtml = '';
     if (activities.length > 0) {
-      const last4 = activities.slice(0, 4);
-      const totalKm = last4.reduce((s, a) => s + a.distance, 0) / 1000;
       const lastPace = Strava.formatPace(activities[0].average_speed);
       const weekKm = activities
         .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
         .reduce((s, a) => s + a.distance, 0) / 1000;
+
+      // Stats annuelles depuis le cache local (si dispo)
+      let yearStatsInner = '';
+      try {
+        const currentYear = now.getFullYear();
+        const c2025 = localStorage.getItem('strava_yearstats_2025');
+        const c2026 = localStorage.getItem('strava_yearstats_' + currentYear);
+        const s2025 = c2025 ? JSON.parse(c2025).data : null;
+        const s2026 = (currentYear >= 2026 && c2026) ? JSON.parse(c2026).data : null;
+        if (s2025 || s2026) {
+          yearStatsInner = this.renderYearStats(s2025, s2026);
+        }
+      } catch(e) {}
+
+      const yearStatsBlock = yearStatsInner
+        ? `<div id="year-stats-block" style="margin-top:10px;">${yearStatsInner}</div>`
+        : `<div id="year-stats-block" style="margin-top:10px;">
+            <button class="btn-ghost" style="width:100%;font-size:13px;padding:9px 0;" onclick="App.loadYearStats(this)">
+              📊 Charger les stats annuelles 2025 / 2026
+            </button>
+           </div>`;
 
       metricsHtml = `
         <div class="metrics-row">
           <div class="metric-tile"><div class="metric-val">${weekKm.toFixed(0)}</div><div class="metric-label">km cette semaine</div></div>
           <div class="metric-tile"><div class="metric-val">${lastPace}</div><div class="metric-label">dernière allure</div></div>
           <div class="metric-tile"><div class="metric-val">${activities.length}</div><div class="metric-label">courses total</div></div>
-        </div>`;
+        </div>
+        ${yearStatsBlock}`;
     }
 
     // This week plan + next week
@@ -106,7 +105,7 @@ const UI = {
         ${this.renderActivityCard(a, true)}`;
     }
 
-    el.innerHTML = countdownHtml + metricsHtml + planHtml + lastActHtml;
+    el.innerHTML = metricsHtml + planHtml + lastActHtml;
     // Initialise la carte Leaflet de la dernière course (lazy)
     requestAnimationFrame(() => this.initMapObserver());
   },
@@ -129,10 +128,22 @@ const UI = {
       ? activities.map(a => this.renderActivityCard(a, true)).join('')
       : `<div class="empty-state"><div class="empty-state-icon">🏃</div><div class="empty-state-title">Aucune course</div><div class="empty-state-sub">${isConnected ? 'Synchronise Strava pour importer tes courses.' : 'Connecte ton compte Strava pour commencer.'}</div></div>`;
 
+    const yearStatsHtml = isConnected ? `
+      <div class="section-header" style="margin-top:8px;">
+        <div class="section-title">Stats annuelles</div>
+        <button class="btn-ghost" onclick="App.loadYearStats(this)" style="font-size:12px;">Charger</button>
+      </div>
+      <div id="year-stats-block" style="margin-bottom:8px;">
+        <div style="font-size:12px;color:var(--text-hint);padding:8px 0;">
+          Appuie sur "Charger" pour récupérer toutes tes courses sur Strava.
+        </div>
+      </div>` : '';
+
     el.innerHTML = `
       ${connectBanner}
+      ${yearStatsHtml}
       <div class="section-header" style="margin-top:4px;">
-        <div class="section-title">Courses</div>
+        <div class="section-title">Courses récentes</div>
         ${isConnected ? `<button class="btn-ghost" onclick="App.syncStrava()">↻ Sync</button>` : ''}
       </div>
       ${activityList}`;
@@ -671,6 +682,54 @@ const UI = {
     detailDiv.innerHTML = chartHtml + mapHtml + splitsHtml + zonesHtml + descHtml ||
       '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Pas de données détaillées disponibles</div>';
     detailDiv.dataset.loaded = '1';
+  },
+
+  // ── Stats annuelles ───────────────────────────────────────────────────────────
+  renderYearStats(stats2025, stats2026) {
+    const fmtKm  = km  => km.toFixed(0) + ' km';
+    const fmtDur = sec => {
+      const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+      return h + 'h' + (m < 10 ? '0' : '') + m;
+    };
+    const fmtPace = sec => {
+      if (!sec) return '--';
+      const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+      return m + ':' + (s < 10 ? '0' + s : '' + s) + '/km';
+    };
+    const fmtElev = m => '+' + m.toLocaleString('fr-FR') + ' m';
+
+    const row = (s) => {
+      if (!s) return '';
+      return `
+        <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:10px;">${s.year}</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${s.count}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">courses</div>
+            </div>
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtKm(s.totalKm)}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">distance</div>
+            </div>
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtDur(s.totalSeconds)}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">temps</div>
+            </div>
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtElev(s.totalElevation)}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">dénivelé</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);
+                      display:flex;gap:16px;font-size:12px;color:var(--text-muted);">
+            <span>⚡ Allure moy. <strong>${fmtPace(s.avgPace)}</strong></span>
+            <span>📅 <strong>${(s.totalKm / 52).toFixed(1)} km</strong>/semaine en moyenne</span>
+          </div>
+        </div>`;
+    };
+
+    return (row(stats2026) || '') + (row(stats2025) || '');
   },
 
   // ── Carte OSM Leaflet (lazy via IntersectionObserver) ────────────────────────

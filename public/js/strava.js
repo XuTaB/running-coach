@@ -54,6 +54,60 @@ const Strava = {
     } catch(e) { console.error('Fetch activities error', e); return null; }
   },
 
+  // ── Stats annuelles : toutes les runs d'une année (pagination complète) ──────
+  async fetchYearStats(year) {
+    const token = await this.getValidToken();
+    if (!token) return null;
+
+    // Vérifier le cache (1h)
+    const cacheKey = 'strava_yearstats_' + year;
+    const cached   = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const c = JSON.parse(cached);
+        if (Date.now() - c.ts < 3600000) return c.data;
+      } catch(e) {}
+    }
+
+    const afterTs  = Math.floor(new Date(year + '-01-01T00:00:00Z').getTime() / 1000);
+    const beforeTs = Math.floor(new Date((year + 1) + '-01-01T00:00:00Z').getTime() / 1000);
+
+    let allRuns = [], page = 1;
+    try {
+      while (true) {
+        const res = await fetch(
+          `https://www.strava.com/api/v3/athlete/activities?after=${afterTs}&before=${beforeTs}&per_page=200&page=${page}`,
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        if (!res.ok) break;
+        const batch = await res.json();
+        if (!Array.isArray(batch) || !batch.length) break;
+
+        const runs = batch.filter(a => a.type === 'Run' || a.sport_type === 'Run');
+        allRuns = allRuns.concat(runs);
+
+        if (batch.length < 200) break;  // dernière page
+        page++;
+      }
+    } catch(e) { console.error('fetchYearStats error', e); return null; }
+
+    const data = {
+      year,
+      count:          allRuns.length,
+      totalKm:        allRuns.reduce((s, a) => s + (a.distance || 0), 0) / 1000,
+      totalSeconds:   allRuns.reduce((s, a) => s + (a.moving_time || 0), 0),
+      totalElevation: Math.round(allRuns.reduce((s, a) => s + (a.total_elevation_gain || 0), 0)),
+      avgPace:        null
+    };
+    // Allure moyenne globale (m/s → sec/km)
+    const totalDist = allRuns.reduce((s, a) => s + (a.distance || 0), 0);
+    const totalMove = allRuns.reduce((s, a) => s + (a.moving_time || 0), 0);
+    if (totalDist > 0) data.avgPace = totalMove / (totalDist / 1000);
+
+    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
+    return data;
+  },
+
   // ── Détail complet d'une activité ────────────────────────────────────────────
   async fetchActivityDetail(id) {
     const token = await this.getValidToken();

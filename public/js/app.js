@@ -434,6 +434,28 @@ const App = {
     }
   },
 
+  async loadYearStats(btn) {
+    const block = document.getElementById('year-stats-block');
+    if (!block) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Chargement…'; }
+    block.innerHTML = '<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">Récupération des données Strava… (peut prendre quelques secondes)</div>';
+
+    const currentYear = new Date().getFullYear();
+    const [s2025, s2026] = await Promise.all([
+      Strava.fetchYearStats(2025),
+      currentYear >= 2026 ? Strava.fetchYearStats(2026) : Promise.resolve(null)
+    ]);
+
+    if (!s2025 && !s2026) {
+      block.innerHTML = '<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">Impossible de récupérer les stats. Réessaie.</div>';
+      if (btn) { btn.disabled = false; btn.textContent = 'Réessayer'; }
+      return;
+    }
+
+    block.innerHTML = UI.renderYearStats(s2025, s2026);
+    if (btn) btn.style.display = 'none';
+  },
+
   async syncStrava(silent = false) {
     if (!Strava.isConnected()) { UI.toast('Strava non connecté'); return; }
     if (!silent) UI.toast('Synchronisation…');
