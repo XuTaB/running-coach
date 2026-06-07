@@ -299,6 +299,22 @@ input[type=range]::-moz-range-thumb {
 .session-strava-title:active { opacity: 0.6; }
 .session-strava-title span { color: var(--text-muted); }
 
+/* ===== LEAFLET MAP IN CARD ===== */
+.act-leafmap {
+  height: 150px;
+  width: 100%;
+  border-top: 0.5px solid var(--border);
+  border-bottom: 0.5px solid var(--border);
+  overflow: hidden;
+}
+/* Masque les contrôles Leaflet inutiles sur petite carte */
+.act-leafmap .leaflet-control-attribution {
+  font-size: 8px !important;
+  opacity: 0.55;
+  background: transparent !important;
+  padding: 1px 4px;
+}
+
 /* ===== ACTIVITY CARDS ===== */
 .act-card {
   background: var(--bg); border-radius: var(--radius-lg);

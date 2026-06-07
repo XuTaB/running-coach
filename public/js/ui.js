@@ -134,6 +134,9 @@ const UI = {
         ${isConnected ? `<button class="btn-ghost" onclick="App.syncStrava()">↻ Sync</button>` : ''}
       </div>
       ${activityList}`;
+
+    // Initialise les cartes Leaflet au scroll (lazy)
+    requestAnimationFrame(() => this.initMapObserver());
   },
 
   renderActivityCard(activity, withFeedback) {
@@ -178,6 +181,9 @@ const UI = {
           <div><div class="act-stat-val" style="font-size:13px;">${activity.average_temp !== undefined ? activity.average_temp+'°C' : '--'}</div><div class="act-stat-label">temp.</div></div>
           <div><div id="act-gear-${activity.id}" class="act-stat-val" style="font-size:13px;">${activity.gear?.name ? activity.gear.name.slice(0,8) : '--'}</div><div class="act-stat-label">chaussures</div></div>
         </div>
+
+        <!-- Carte OSM (lazy-init Leaflet au scroll) -->
+        ${activity.map && activity.map.summary_polyline ? `<div class="act-leafmap" id="leafmap-${activity.id}" data-polyline="${activity.map.summary_polyline}"></div>` : ''}
 
         <!-- Détails étendus (chargés au clic) -->
         <div id="detail-${activity.id}" style="display:none;padding:12px 16px;border-bottom:0.5px solid var(--border);">
@@ -647,13 +653,89 @@ const UI = {
     if (gearEl && detail.gear && detail.gear.name) gearEl.textContent = detail.gear.name.slice(0, 10);
 
     var chartHtml = this.renderStreamsChart(detail);
-    var mapHtml   = this._renderMapTrace(detail);
+    var mapHtml   = '';  // carte OSM déjà dans la card via Leaflet (summary_polyline)
     detailDiv.innerHTML = chartHtml + mapHtml + splitsHtml + zonesHtml + descHtml ||
       '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Pas de données détaillées disponibles</div>';
     detailDiv.dataset.loaded = '1';
   },
 
-  // ── Carte GPS avec tracé SVG ──────────────────────────────────────────────────
+  // ── Carte OSM Leaflet (lazy via IntersectionObserver) ────────────────────────
+  initMapObserver() {
+    var self = this;
+    if (!window.L) {
+      // Leaflet pas encore chargé → réessayer dans 500ms
+      setTimeout(function() { self.initMapObserver(); }, 500);
+      return;
+    }
+    var maps = document.querySelectorAll('.act-leafmap[data-polyline]:not([data-inited])');
+    if (!maps.length) return;
+
+    if (!this._mapObs) {
+      this._mapObs = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting) return;
+          var el = entry.target;
+          if (el.dataset.inited) return;
+          el.dataset.inited = '1';
+          self._initLeafletMap(el);
+          self._mapObs.unobserve(el);
+        });
+      }, { rootMargin: '200px', threshold: 0 });
+    }
+    maps.forEach(function(el) { self._mapObs.observe(el); });
+  },
+
+  _initLeafletMap(el) {
+    var coords = this._decodePolyline(el.dataset.polyline || '');
+    if (coords.length < 2) { el.style.display = 'none'; return; }
+
+    var map = L.map(el, {
+      zoomControl:       false,
+      dragging:          false,
+      scrollWheelZoom:   false,
+      doubleClickZoom:   false,
+      touchZoom:         false,
+      boxZoom:           false,
+      keyboard:          false,
+      attributionControl: false,
+      tap:               false
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+    }).addTo(map);
+
+    var line = L.polyline(coords, { color: '#f97316', weight: 3, opacity: 0.95 }).addTo(map);
+
+    // Point de départ (vert) et d'arrivée (rouge)
+    var startIcon = L.divIcon({ className: '', html: '<div style="width:10px;height:10px;background:#22C55E;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>', iconSize: [10,10], iconAnchor: [5,5] });
+    var endIcon   = L.divIcon({ className: '', html: '<div style="width:10px;height:10px;background:#EF4444;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>', iconSize: [10,10], iconAnchor: [5,5] });
+    L.marker(coords[0],              { icon: startIcon }).addTo(map);
+    L.marker(coords[coords.length-1],{ icon: endIcon   }).addTo(map);
+
+    // Attribution minuscule en bas à droite
+    L.control.attribution({ prefix: false, position: 'bottomright' }).addTo(map);
+
+    map.fitBounds(line.getBounds(), { padding: [14, 14] });
+  },
+
+  _decodePolyline(encoded) {
+    // Décodeur Google Encoded Polyline Algorithm
+    var pts = [], idx = 0, lat = 0, lng = 0;
+    while (idx < encoded.length) {
+      var b, shift = 0, result = 0;
+      do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+      shift = 0; result = 0;
+      do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+      lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+      pts.push([lat / 1e5, lng / 1e5]);
+    }
+    return pts;
+  },
+
+  // ── Carte GPS avec tracé SVG (legacy — conservé mais non appelé) ─────────────
   _renderMapTrace(detail) {
     var stream = detail.streams && detail.streams.latlng;
     if (!stream || !stream.data || stream.data.length < 10) return '';
