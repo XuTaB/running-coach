@@ -1107,12 +1107,14 @@ const UI = {
 
   // ===== HELPERS PLAN =====
 
-  // Ordre canonique des jours de la semaine (lundi=0 … dimanche=6)
-  _DAY_ORDER: {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6},
-
-  // Trie les jours d'un plan dans l'ordre calendaire
+  // Trie les jours d'un plan dans l'ordre calendaire Lun→Dim
   _sortDays(days) {
-    return days.slice().sort((a, b) => (this._DAY_ORDER[a.day] ?? 7) - (this._DAY_ORDER[b.day] ?? 7));
+    var order = {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6};
+    return days.slice().sort(function(a, b) {
+      var oa = order[a.day] !== undefined ? order[a.day] : 7;
+      var ob = order[b.day] !== undefined ? order[b.day] : 7;
+      return oa - ob;
+    });
   },
 
   // Retourne un map {Lun: Date, Mar: Date, ...} pour la semaine décalée de weekOffset

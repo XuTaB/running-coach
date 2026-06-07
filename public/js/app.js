@@ -546,14 +546,24 @@ const App = {
       }
 
       // Valide et corrige chaque jour
-      // On force le type depuis le schedule du profil (l'IA se trompe souvent)
+      // 1) Schedule profil prioritaire sur le type IA
+      // 2) Si le jour n'est pas dans le schedule (IA a changé de jour), détection par label
       const scheduleMap = Storage.getProfile()?.schedule || {};
+      const guessType = (d) => {
+        if (scheduleMap[d.day]) return scheduleMap[d.day];
+        const lbl = (d.label || '').toLowerCase();
+        if (/sortie.{0,10}long|long.{0,10}run/.test(lbl)) return 'sl';
+        if (/fraction|vma|interval|speed|rapide/.test(lbl)) return 'work';
+        if (/seuil|tempo|threshold|allure.{0,8}marathon/.test(lbl)) return 'tempo';
+        if (/r[ée]cup|recovery|repos/.test(lbl)) return 'recup';
+        return d.type || 'ef';
+      };
       plan.weeks = plan.weeks.map(week => ({
         title:     week.title     || 'Semaine',
         volume_km: week.volume_km || 0,
         days: (week.days || []).map(d => ({
           day:    d.day    || '',
-          type:   scheduleMap[d.day] || d.type || 'rest',  // schedule prioritaire sur l'IA
+          type:   guessType(d),
           label:  d.label  || 'Repos',
           detail: d.detail || ''
         }))
