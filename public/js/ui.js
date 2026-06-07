@@ -1137,9 +1137,21 @@ const UI = {
   // Types de séances sans phases (ligne simple)
   _SIMPLE_TYPES: {'ef':1,'sl':1,'recup':1,'rest':1},
 
+  // Résout le type réel d'une séance (corrige les erreurs IA via le label)
+  _resolveType(d) {
+    var t = d.type || 'ef';
+    var lbl = (d.label || '').toLowerCase();
+    if (/sortie.{0,12}long|long.{0,12}run/.test(lbl)) return 'sl';
+    if (/fraction|vma|interval|speed|rapide/.test(lbl)) return 'work';
+    if (/seuil|tempo|threshold/.test(lbl)) return 'tempo';
+    if (/r[ée]cup|recovery|repos/.test(lbl)) return 'recup';
+    return t;
+  },
+
   // Génère le HTML d'une ligne de séance
   _renderPlanDay(d, weekDates, now, skipPast) {
     const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',work:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',free:'pill-ef',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
+    const resolvedType = this._resolveType(d);
     const date = weekDates[d.day];
     if (skipPast && date) {
       const dayEnd = new Date(date);
@@ -1149,13 +1161,13 @@ const UI = {
     const isToday = date && date.toDateString() === now.toDateString();
     const dateNum = date ? date.getDate() : '';
     const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
-    const detailHtml = this._SIMPLE_TYPES[d.type]
+    const detailHtml = this._SIMPLE_TYPES[resolvedType]
       ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + this._extractWorkPart(d.detail) + '</div>' : '')
       : this._renderSessionPhases(d.detail, d.label);
     return '<div class="day-row">' +
       '<div class="day-name' + (isToday ? ' today' : '') + '">' + dayLabel + '</div>' +
       '<div style="flex:1;">' +
-      '<span class="session-pill ' + (typeClass[d.type] || 'pill-ef') + '">' + d.label + '</span>' +
+      '<span class="session-pill ' + (typeClass[resolvedType] || 'pill-ef') + '">' + d.label + '</span>' +
       detailHtml +
       '</div>' +
       '</div>';
