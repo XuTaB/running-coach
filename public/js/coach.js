@@ -32,11 +32,12 @@ FORMAT DU CHAMP "detail" — deux règles selon le type de séance :
    - Seuil : "15' échauffement allure 5:50-6:10 · 3x8' allure 4:45/km r2' · 10' retour au calme"
    - Tempo : "15' échauffement allure 5:50-6:10 · 20' allure 4:55-5:05/km · 10' retour au calme"
 
-2. Séances faciles (EF, sortie longue, récup) → une seule ligne descriptive, PAS de phases :
-   Exemples :
+2. Séances faciles (EF, sortie longue, récup) → UNE SEULE ligne, SANS · , SANS échauffement, SANS retour au calme :
+   Exemples CORRECTS :
    - EF : "10 km allure 5:50-6:10/km FC<75%, effort conversationnel"
-   - SL : "18 km allure 5:40-6:00/km, progression naturelle sur les 5 derniers km"
-   - Récup : "6 km très facile allure 6:10-6:30/km, jambes légères"
+   - SL : "18 km allure 5:40-6:00/km, légère progression sur les 5 derniers km"
+   - Récup : "6 km très facile allure 6:10-6:30/km"
+   INTERDIT pour EF/SL/récup : le caractère ·, "échauffement", "retour au calme"
 
 INTERDIT pour les séances intenses : "puis", virgules comme séparateur de phases. Seul · est autorisé.`,
 

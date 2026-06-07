@@ -520,7 +520,7 @@ const UI = {
     const dateNum = date ? date.getDate() : '';
     const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
     const detailHtml = this._SIMPLE_TYPES[d.type]
-      ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + d.detail + '</div>' : '')
+      ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + this._extractWorkPart(d.detail) + '</div>' : '')
       : this._renderSessionPhases(d.detail, d.label);
     return '<div class="day-row">' +
       '<div class="day-name' + (isToday ? ' today' : '') + '">' + dayLabel + '</div>' +
@@ -558,6 +558,14 @@ const UI = {
     });
     html += '<div class="session-strava-title" onclick="navigator.clipboard.writeText(\'' + safeTitle + '\').then(function(){UI.toast(\'📋 Copié !\')}).catch(function(){UI.toast(\'Copie manuelle\')})">📋 <span>' + stravaTitle + '</span></div>';
     return html;
+  },
+
+  // Pour EF/SL/récup : si Gemini a quand même mis des ·, extrait uniquement la partie travail
+  _extractWorkPart(detail) {
+    var parts = detail.split('·').map(function(p) { return p.trim(); }).filter(Boolean);
+    if (parts.length === 3) return parts[1]; // échauffement · TRAVAIL · récup → garde le milieu
+    if (parts.length === 2) return parts[0]; // TRAVAIL · récup → garde le début
+    return detail; // pas de · → affiche tel quel
   },
 
   // Détecte les phases dans du texte libre (quand pas de séparateur ·)
