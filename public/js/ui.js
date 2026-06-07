@@ -1129,7 +1129,7 @@ const UI = {
 
   // Génère le HTML d'une ligne de séance
   _renderPlanDay(d, weekDates, now, skipPast) {
-    const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
+    const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',work:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',free:'pill-ef',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
     const date = weekDates[d.day];
     if (skipPast && date) {
       const dayEnd = new Date(date);

@@ -305,7 +305,8 @@ ${historyStr}
 
 CONSIGNES IMPORTANTES :
 - Inclure UNIQUEMENT les jours du planning hebdo ci-dessus
-- Respecter STRICTEMENT le type de séance assigné à chaque jour (ef=EF, work=fractionné/VMA/seuil, sl=sortie longue)
+- Le champ "type" JSON DOIT correspondre EXACTEMENT au planning : ${schedEntries.map(([d,t])=>'"'+d+'"→type="'+t+'"').join(', ')}
+- NE PAS inverser les types entre les jours — c'est une contrainte absolue
 - PAS de jours de repos dans le plan
 - Adapter l'intensité selon le dernier run et les feedbacks
 - Si douleurs signalées → réduire l'intensité ou proposer récup active
