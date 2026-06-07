@@ -189,6 +189,147 @@ const UI = {
   },
 
   // Charge et affiche les données détaillées d'une activité
+  // ── Graphique Allure + FC + Dénivelé ─────────────────────────────────────────
+  renderStreamsChart(detail) {
+    var streams = detail.streams;
+    if (!streams) return '';
+
+    var velData  = (streams.velocity_smooth && streams.velocity_smooth.data)  || [];
+    var hrData   = (streams.heartrate        && streams.heartrate.data)        || [];
+    var altData  = (streams.altitude         && streams.altitude.data)         || [];
+    var distData = (streams.distance         && streams.distance.data)         || [];
+
+    if (velData.length < 20) return '';
+
+    // Downsampling → ~250 points max
+    var step = Math.max(1, Math.floor(velData.length / 250));
+    var pts  = [];
+    for (var i = 0; i < velData.length; i += step) {
+      var v = velData[i];
+      pts.push({
+        d:    distData[i] || 0,
+        pace: (v > 0.5) ? 1000 / v : null,   // sec/km, null si arrêté
+        hr:   hrData[i]  || null,
+        alt:  (altData[i] !== undefined && altData[i] !== null) ? altData[i] : null
+      });
+    }
+
+    var W = 600, H = 130;
+    var PAD = { top: 10, right: 38, bottom: 22, left: 40 };
+    var cW = W - PAD.left - PAD.right;
+    var cH = H - PAD.top  - PAD.bottom;
+
+    var maxDist = (pts[pts.length - 1] && pts[pts.length - 1].d) ? pts[pts.length - 1].d : 1;
+    var xOf = function(d) { return PAD.left + (d / maxDist) * cW; };
+
+    // ── Allure (axe gauche, orange) ───────────────────────────────────────────
+    var validPaces = pts.map(function(p) { return p.pace; }).filter(function(p) { return p && p < 900; });
+    if (!validPaces.length) return '';
+    var pMin   = Math.min.apply(null, validPaces);
+    var pMax   = Math.max.apply(null, validPaces);
+    var pRange = pMax - pMin || 30;
+    // Allure inversée : plus lent (valeur haute) = plus bas sur le chart
+    var yPace  = function(p) { return PAD.top + ((p - pMin) / pRange) * cH; };
+
+    // ── FC (axe droit, rouge) ─────────────────────────────────────────────────
+    var validHR = pts.map(function(p) { return p.hr; }).filter(Boolean);
+    var hrMin   = validHR.length ? Math.max(80,  Math.min.apply(null, validHR) - 5)  : 100;
+    var hrMax   = validHR.length ? Math.min(220, Math.max.apply(null, validHR) + 5)  : 200;
+    var hrRange = hrMax - hrMin || 100;
+    var yHR     = function(h) { return PAD.top + cH - ((h - hrMin) / hrRange) * cH; };
+
+    // ── Dénivelé (fond) ───────────────────────────────────────────────────────
+    var altPts  = pts.filter(function(p) { return p.alt !== null; });
+    var elevSvg = '';
+    if (altPts.length > 5) {
+      var aMin   = Math.min.apply(null, altPts.map(function(p) { return p.alt; }));
+      var aMax   = Math.max.apply(null, altPts.map(function(p) { return p.alt; }));
+      var aRange = aMax - aMin || 1;
+      var elevH  = cH * 0.55;   // le relief occupe 55% de la hauteur
+      var yAlt   = function(a) { return PAD.top + cH - ((a - aMin) / aRange) * elevH; };
+      var bottom = PAD.top + cH;
+      var leftX  = xOf(altPts[0].d).toFixed(1);
+      var rightX = xOf(altPts[altPts.length - 1].d).toFixed(1);
+      var pathD  = altPts.map(function(p, idx) {
+        return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yAlt(p.alt).toFixed(1);
+      }).join(' ');
+      elevSvg = '<path d="' + pathD + ' L' + rightX + ',' + bottom + ' L' + leftX + ',' + bottom + ' Z"'
+        + ' fill="rgba(90,140,200,0.13)" stroke="rgba(90,140,200,0.4)" stroke-width="1"/>';
+    }
+
+    // ── Grille verticale + labels X (km) ─────────────────────────────────────
+    var totalKm = maxDist / 1000;
+    var kmStep  = totalKm > 25 ? 5 : totalKm > 12 ? 2 : 1;
+    var gridSvg = '', xLabelSvg = '';
+    for (var km = 0; km <= Math.ceil(totalKm); km += kmStep) {
+      var xk = xOf(km * 1000).toFixed(1);
+      gridSvg   += '<line x1="' + xk + '" y1="' + PAD.top + '" x2="' + xk + '" y2="' + (PAD.top + cH) + '"'
+        + ' stroke="rgba(128,128,128,0.15)" stroke-width="1"/>';
+      xLabelSvg += '<text x="' + xk + '" y="' + (H - 5) + '" text-anchor="middle"'
+        + ' font-size="9" fill="rgba(128,128,128,0.7)">' + km + 'km</text>';
+    }
+
+    // ── Labels Y gauche (allure) ──────────────────────────────────────────────
+    var pLabelSvg = '';
+    [pMin, (pMin + pMax) / 2, pMax].forEach(function(p) {
+      var m     = Math.floor(p / 60);
+      var s     = Math.round(p % 60);
+      var label = m + ':' + (s < 10 ? '0' + s : '' + s);
+      var y     = yPace(p).toFixed(1);
+      pLabelSvg += '<text x="' + (PAD.left - 3) + '" y="' + y + '" text-anchor="end"'
+        + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">' + label + '</text>';
+    });
+
+    // ── Labels Y droite (FC) ──────────────────────────────────────────────────
+    var hrLabelSvg = '';
+    if (validHR.length) {
+      [hrMin, Math.round((hrMin + hrMax) / 2), hrMax].forEach(function(h) {
+        var y = yHR(h).toFixed(1);
+        hrLabelSvg += '<text x="' + (W - PAD.right + 4) + '" y="' + y + '"'
+          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + Math.round(h) + '</text>';
+      });
+    }
+
+    // ── Courbe allure ─────────────────────────────────────────────────────────
+    var pacePts = pts.filter(function(p) { return p.pace && p.pace < 900; });
+    var paceSvg = '';
+    if (pacePts.length > 1) {
+      var paceD = pacePts.map(function(p, idx) {
+        return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yPace(p.pace).toFixed(1);
+      }).join(' ');
+      paceSvg = '<path d="' + paceD + '" fill="none" stroke="rgba(249,115,22,0.9)"'
+        + ' stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+
+    // ── Courbe FC ─────────────────────────────────────────────────────────────
+    var hrPts = pts.filter(function(p) { return p.hr; });
+    var hrSvg = '';
+    if (hrPts.length > 1) {
+      var hrD = hrPts.map(function(p, idx) {
+        return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yHR(p.hr).toFixed(1);
+      }).join(' ');
+      hrSvg = '<path d="' + hrD + '" fill="none" stroke="rgba(239,68,68,0.85)"'
+        + ' stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5,2"/>';
+    }
+
+    // ── Légende ───────────────────────────────────────────────────────────────
+    var legendParts = ['<span style="color:rgba(249,115,22,0.95);font-weight:600;">— Allure</span>'];
+    if (hrPts.length  > 1) legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">--- FC</span>');
+    if (altPts.length > 5) legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
+    var legend = '<div style="display:flex;gap:14px;margin-bottom:5px;font-size:11px;">' + legendParts.join('') + '</div>';
+
+    return '<div style="margin-bottom:14px;">'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;'
+      + 'text-transform:uppercase;letter-spacing:0.05em;">Analyse graphique</div>'
+      + legend
+      + '<div style="background:var(--bg2);border-radius:8px;padding:6px;overflow:hidden;">'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" preserveAspectRatio="xMidYMid meet">'
+      + elevSvg + gridSvg + hrSvg + paceSvg + pLabelSvg + hrLabelSvg + xLabelSvg
+      + '</svg>'
+      + '</div>'
+      + '</div>';
+  },
+
   async loadActivityDetail(id) {
     const detailDiv = document.getElementById('detail-' + id);
     if (!detailDiv) return;
@@ -254,7 +395,8 @@ const UI = {
         <div style="font-size:13px;color:var(--text);">${detail.description}</div>
       </div>` : '';
 
-    detailDiv.innerHTML = splitsHtml + zonesHtml + descHtml ||
+    var chartHtml = this.renderStreamsChart(detail);
+    detailDiv.innerHTML = chartHtml + splitsHtml + zonesHtml + descHtml ||
       '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Pas de données détaillées disponibles</div>';
     detailDiv.dataset.loaded = '1';
   },
