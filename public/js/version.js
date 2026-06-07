@@ -1,5 +1,5 @@
 // version.js — Source de vérité pour la version de l'app
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 
 // Force le remplacement du badge dès que le JS tourne
 // (au cas où le HTML en cache aurait une vieille version)
