@@ -546,12 +546,14 @@ const App = {
       }
 
       // Valide et corrige chaque jour
+      // On force le type depuis le schedule du profil (l'IA se trompe souvent)
+      const scheduleMap = Storage.getProfile()?.schedule || {};
       plan.weeks = plan.weeks.map(week => ({
         title:     week.title     || 'Semaine',
         volume_km: week.volume_km || 0,
         days: (week.days || []).map(d => ({
           day:    d.day    || '',
-          type:   d.type   || 'rest',
+          type:   scheduleMap[d.day] || d.type || 'rest',  // schedule prioritaire sur l'IA
           label:  d.label  || 'Repos',
           detail: d.detail || ''
         }))

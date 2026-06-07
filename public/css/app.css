@@ -593,6 +593,26 @@ body.dark .session-pill.pill-rest {
   color: var(--text-muted);
 }
 
+body.dark .session-pill.pill-sl {
+  background: #0D2A45;
+  color: #5BB0F0;
+}
+
+body.dark .session-pill.pill-ef {
+  background: #0D2B14;
+  color: #4CAF6A;
+}
+
+body.dark .session-pill.pill-vma {
+  background: #2D0F0F;
+  color: #F07070;
+}
+
+body.dark .session-pill.pill-tempo {
+  background: #2B1E00;
+  color: #E0A030;
+}
+
 body.dark .btn-back {
   background: var(--bg3);
   color: var(--text-muted);

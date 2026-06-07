@@ -72,7 +72,7 @@ const UI = {
       const weekDates1 = this._getWeekDates(1);
 
       const renderHomeWeek = (week, weekDates, skipPast, title) => {
-        const daysHtml = week.days
+        const daysHtml = this._sortDays(week.days)
           .filter(d => d.type !== 'rest' && d.type !== 'recup')
           .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
           .filter(Boolean)
@@ -1107,6 +1107,14 @@ const UI = {
 
   // ===== HELPERS PLAN =====
 
+  // Ordre canonique des jours de la semaine (lundi=0 … dimanche=6)
+  _DAY_ORDER: {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6},
+
+  // Trie les jours d'un plan dans l'ordre calendaire
+  _sortDays(days) {
+    return days.slice().sort((a, b) => (this._DAY_ORDER[a.day] ?? 7) - (this._DAY_ORDER[b.day] ?? 7));
+  },
+
   // Retourne un map {Lun: Date, Mar: Date, ...} pour la semaine décalée de weekOffset
   _getWeekDates(weekOffset) {
     const today = new Date();
@@ -1229,7 +1237,7 @@ const UI = {
     const weekDates1 = this._getWeekDates(1);
 
     const renderWeekBlock = (week, weekDates, skipPast, forceTitle) => {
-      const daysHtml = week.days
+      const daysHtml = this._sortDays(week.days)
         .filter(d => d.type !== 'rest' && d.type !== 'recup')
         .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
         .filter(Boolean)
