@@ -60,7 +60,7 @@ const Strava = {
     if (!token) return null;
 
     // Cache local — évite de rappeler l'API à chaque ouverture
-    const cacheKey = 'strava_detail_' + id;
+    const cacheKey = 'strava_detail_v3_' + id;   // v3 : inclut latlng stream
     const cached   = localStorage.getItem(cacheKey);
     if (cached) {
       try { return JSON.parse(cached); } catch(e) {}
@@ -71,7 +71,7 @@ const Strava = {
       const [detailRes, streamsRes, zonesRes] = await Promise.all([
         fetch(`https://www.strava.com/api/v3/activities/${id}`,
           { headers: { Authorization: 'Bearer ' + token } }),
-        fetch(`https://www.strava.com/api/v3/activities/${id}/streams?keys=heartrate,cadence,watts,velocity_smooth,altitude,time,distance,temp&key_by_type=true`,
+        fetch(`https://www.strava.com/api/v3/activities/${id}/streams?keys=heartrate,cadence,watts,velocity_smooth,altitude,time,distance,temp,latlng&key_by_type=true`,
           { headers: { Authorization: 'Bearer ' + token } }),
         fetch(`https://www.strava.com/api/v3/activities/${id}/zones`,
           { headers: { Authorization: 'Bearer ' + token } })

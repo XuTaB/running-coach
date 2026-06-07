@@ -169,14 +169,14 @@ const UI = {
           <div><div class="act-stat-val" style="font-size:13px;">${activity.total_elevation_gain ? Math.round(activity.total_elevation_gain)+'m' : '--'}</div><div class="act-stat-label">dénivelé</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${activity.max_heartrate || '--'}</div><div class="act-stat-label">FC max</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${cadence ? cadence+'/min' : '--'}</div><div class="act-stat-label">cadence</div></div>
-          <div><div class="act-stat-val" style="font-size:13px;">${activity.calories ? Math.round(activity.calories)+' kcal' : '--'}</div><div class="act-stat-label">calories</div></div>
+          <div><div id="act-cal-${activity.id}" class="act-stat-val" style="font-size:13px;">${activity.calories ? Math.round(activity.calories)+' kcal' : '--'}</div><div class="act-stat-label">calories</div></div>
         </div>
         <!-- Stats secondaires ligne 2 -->
         <div style="display:grid;grid-template-columns:repeat(4,1fr);padding:0 16px 12px;gap:4px;border-bottom:0.5px solid var(--border);">
           <div><div class="act-stat-val" style="font-size:13px;">${Strava.formatPace(activity.max_speed)}</div><div class="act-stat-label">allure max</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${suffer || '--'}</div><div class="act-stat-label">suffer</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${activity.average_temp !== undefined ? activity.average_temp+'°C' : '--'}</div><div class="act-stat-label">temp.</div></div>
-          <div><div class="act-stat-val" style="font-size:13px;">${activity.gear?.name ? activity.gear.name.slice(0,8) : '--'}</div><div class="act-stat-label">chaussures</div></div>
+          <div><div id="act-gear-${activity.id}" class="act-stat-val" style="font-size:13px;">${activity.gear?.name ? activity.gear.name.slice(0,8) : '--'}</div><div class="act-stat-label">chaussures</div></div>
         </div>
 
         <!-- Détails étendus (chargés au clic) -->
@@ -640,10 +640,96 @@ const UI = {
         <div style="font-size:13px;color:var(--text);">${detail.description}</div>
       </div>` : '';
 
+    // Patch calories + chaussures dans le header (non dispo dans la liste Strava)
+    const calEl  = document.getElementById('act-cal-'  + id);
+    const gearEl = document.getElementById('act-gear-' + id);
+    if (calEl  && detail.calories)              calEl.textContent  = Math.round(detail.calories) + ' kcal';
+    if (gearEl && detail.gear && detail.gear.name) gearEl.textContent = detail.gear.name.slice(0, 10);
+
     var chartHtml = this.renderStreamsChart(detail);
-    detailDiv.innerHTML = chartHtml + splitsHtml + zonesHtml + descHtml ||
+    var mapHtml   = this._renderMapTrace(detail);
+    detailDiv.innerHTML = chartHtml + mapHtml + splitsHtml + zonesHtml + descHtml ||
       '<div style="font-size:12px;color:var(--text-hint);text-align:center;">Pas de données détaillées disponibles</div>';
     detailDiv.dataset.loaded = '1';
+  },
+
+  // ── Carte GPS avec tracé SVG ──────────────────────────────────────────────────
+  _renderMapTrace(detail) {
+    var stream = detail.streams && detail.streams.latlng;
+    if (!stream || !stream.data || stream.data.length < 10) return '';
+
+    var coords = stream.data;
+    // Downsampling → ~600 pts max
+    var step = Math.max(1, Math.floor(coords.length / 600));
+    var pts  = [];
+    for (var i = 0; i < coords.length; i += step) pts.push(coords[i]);
+
+    // Bounding box
+    var lats   = pts.map(function(p) { return p[0]; });
+    var lngs   = pts.map(function(p) { return p[1]; });
+    var latMin = Math.min.apply(null, lats), latMax = Math.max.apply(null, lats);
+    var lngMin = Math.min.apply(null, lngs), lngMax = Math.max.apply(null, lngs);
+    var latMid = (latMin + latMax) / 2;
+    var latRange = latMax - latMin || 0.0001;
+    var lngRange = lngMax - lngMin || 0.0001;
+
+    // Correction Mercator : 1° lng ≠ 1° lat en distance
+    var lngCorr = lngRange * Math.cos(latMid * Math.PI / 180);
+
+    var VW = 400, VH = 400, PAD = 24;
+    var avW = VW - PAD * 2, avH = VH - PAD * 2;
+    var sc  = Math.min(avW / lngCorr, avH / latRange);
+    var usedW = lngCorr * sc, usedH = latRange * sc;
+    var ox = PAD + (avW - usedW) / 2;
+    var oy = PAD + (avH - usedH) / 2;
+    var cosLat = Math.cos(latMid * Math.PI / 180);
+
+    var toX = function(lng) { return ox + (lng - lngMin) * cosLat * sc; };
+    var toY = function(lat) { return oy + usedH - (lat - latMin) * sc; };
+
+    var pathD = pts.map(function(p, i) {
+      return (i === 0 ? 'M' : 'L') + toX(p[1]).toFixed(1) + ',' + toY(p[0]).toFixed(1);
+    }).join(' ');
+
+    var sx = toX(pts[0][1]).toFixed(1),             sy = toY(pts[0][0]).toFixed(1);
+    var ex = toX(pts[pts.length-1][1]).toFixed(1),  ey = toY(pts[pts.length-1][0]).toFixed(1);
+    var mid = pts.length > 1 ? pts[Math.floor(pts.length / 2)] : pts[0];
+    var mx = toX(mid[1]).toFixed(1), my = toY(mid[0]).toFixed(1);
+    var mapId = 'gpsmap-' + detail.id;
+
+    return '<div style="margin-bottom:14px;">'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;'
+      + 'text-transform:uppercase;letter-spacing:0.05em;">Tracé GPS</div>'
+      + '<div id="' + mapId + '" onclick="UI.toggleMap(\'' + mapId + '\')" '
+      + 'style="background:var(--bg3);border-radius:10px;overflow:hidden;cursor:pointer;'
+      + 'height:180px;transition:height 0.35s ease;position:relative;">'
+      + '<svg viewBox="0 0 ' + VW + ' ' + VH + '" style="width:100%;height:100%;display:block;"'
+      + ' preserveAspectRatio="xMidYMid meet">'
+      // Fond très léger
+      + '<rect width="' + VW + '" height="' + VH + '" fill="rgba(0,0,0,0.0)"/>'
+      // Tracé
+      + '<path d="' + pathD + '" fill="none" stroke="rgba(249,115,22,0.9)" stroke-width="3"'
+      + ' stroke-linejoin="round" stroke-linecap="round"/>'
+      // Point de départ (vert)
+      + '<circle cx="' + sx + '" cy="' + sy + '" r="9" fill="#22C55E" stroke="var(--bg3)" stroke-width="2.5"/>'
+      // Point d'arrivée (rouge)
+      + '<circle cx="' + ex + '" cy="' + ey + '" r="9" fill="#EF4444" stroke="var(--bg3)" stroke-width="2.5"/>'
+      + '</svg>'
+      + '<div id="' + mapId + '-hint" style="position:absolute;bottom:8px;right:10px;'
+      + 'font-size:10px;color:var(--text-hint);background:var(--bg2);'
+      + 'padding:2px 6px;border-radius:4px;">↕ agrandir</div>'
+      + '</div>'
+      + '</div>';
+  },
+
+  toggleMap(mapId) {
+    var el   = document.getElementById(mapId);
+    var hint = document.getElementById(mapId + '-hint');
+    if (!el) return;
+    var expanded = el.dataset.expanded === '1';
+    el.style.height       = expanded ? '180px' : '360px';
+    el.dataset.expanded   = expanded ? '0'     : '1';
+    if (hint) hint.textContent = expanded ? '↕ agrandir' : '↕ réduire';
   },
 
   renderFeedbackForm(activity, existing) {
