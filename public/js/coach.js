@@ -278,6 +278,13 @@ Analyse cette séance en croisant les données objectives (allure, FC, splits) a
       `- ${Strava.formatDistance(a.distance)}km allure ${Strava.formatPace(a.average_speed)}/km`
     ).join('\n') || '- Aucun historique';
 
+    // Planning hebdo : type par jour
+    const typeLabel = { ef: 'Endurance fondamentale', sl: 'Sortie longue', work: 'Fractionné/VMA', free: 'Au choix du coach' };
+    const schedEntries = Object.entries(profile?.schedule || {});
+    const schedLines = schedEntries.length > 0
+      ? schedEntries.map(([day, type]) => `  - ${day} : ${typeLabel[type] || type}`).join('\n')
+      : '  - Mar : Fractionné/VMA\n  - Jeu : Endurance fondamentale\n  - Sam : Sortie longue';
+
     return `En tant que coach running, génère la prochaine semaine d'entraînement sur mesure.
 
 PROFIL :
@@ -285,11 +292,11 @@ PROFIL :
 - Chrono cible : ${profile?.goal?.target || 'finir'}
 - Niveau : ${profile?.level || 'intermédiaire'}
 - Records : 10km ${profile?.prs?.km10 || 'NC'}, Semi ${profile?.prs?.semi || 'NC'}, Marathon ${profile?.prs?.marathon || 'NC'}
-- Jours d'entraînement : ${profile?.trainingDays?.join(', ') || 'Mar, Jeu, Sam'}
-- Séances/semaine : ${profile?.sessionsPerWeek || 3}
-- Jour sortie longue : ${profile?.slDay || 'Sam'}
 - FC max : ${profile?.fcMax || 'NC'} bpm
 - Fragilités : ${profile?.injuries?.join(', ') || 'aucune'}
+
+PLANNING HEBDO IMPOSÉ (RESPECTER OBLIGATOIREMENT) :
+${schedLines}
 
 ${lastRunStr}
 
@@ -297,7 +304,8 @@ HISTORIQUE RÉCENT :
 ${historyStr}
 
 CONSIGNES IMPORTANTES :
-- Inclure UNIQUEMENT les jours d'entraînement (${profile?.trainingDays?.join(', ') || 'Mar, Jeu, Sam'})
+- Inclure UNIQUEMENT les jours du planning hebdo ci-dessus
+- Respecter STRICTEMENT le type de séance assigné à chaque jour (ef=EF, work=fractionné/VMA/seuil, sl=sortie longue)
 - PAS de jours de repos dans le plan
 - Adapter l'intensité selon le dernier run et les feedbacks
 - Si douleurs signalées → réduire l'intensité ou proposer récup active
@@ -306,8 +314,22 @@ CONSIGNES IMPORTANTES :
 RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) avec EXACTEMENT 2 semaines.
 Le champ "detail" doit OBLIGATOIREMENT utiliser le séparateur · entre les 3 phases (échauffement · travail · retour au calme). Aucun "puis" ni virgule entre les phases.
 
-{"weeks":[{"title":"Semaine du 09-06","volume_km":27,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 10 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 18 km allure 5:40-6:00 · 10' retour au calme"}]},{"title":"Semaine du 16-06","volume_km":29,"days":[{"day":"Mar","type":"ef","label":"Endurance fondamentale","detail":"15' échauffement allure 5:50-6:10 · 11 km allure 5:40-5:55 FC<75% · 10' retour au calme"},{"day":"Jeu","type":"vma","label":"VMA","detail":"15' échauffement allure 5:50-6:10 · 7x400m allure 4:30/km r1'30 trot · 10' retour au calme"},{"day":"Sam","type":"sl","label":"Sortie longue","detail":"10' échauffement · 20 km allure 5:40-6:00 · 10' retour au calme"}]}]}
+${(function() {
+  const exampleDetail = {
+    ef:   { type: 'ef',   label: 'Endurance fondamentale', detail: '10 km allure 5:50-6:10/km FC<75%' },
+    sl:   { type: 'sl',   label: 'Sortie longue',          detail: '18 km allure 5:40-6:00/km' },
+    work: { type: 'work', label: 'Fractionné VMA',         detail: "15' échauffement · 6x400m allure 4:30/km r1'30 trot · 10' retour au calme" },
+    free: { type: 'ef',   label: 'Endurance fondamentale', detail: '10 km allure 5:50-6:10/km FC<75%' },
+  };
+  const exDays1 = schedEntries.map(([d, t]) => ({ day: d, ...(exampleDetail[t] || exampleDetail.ef) }));
+  const exDays2 = schedEntries.map(([d, t]) => ({ day: d, ...(exampleDetail[t] || exampleDetail.ef) }));
+  const ex = { weeks: [
+    { title: 'Semaine du XX-06', volume_km: 27, days: exDays1 },
+    { title: 'Semaine du YY-06', volume_km: 29, days: exDays2 }
+  ]};
+  return JSON.stringify(ex);
+})()}
 
-Remplace les valeurs par un plan personnalisé. Règle "detail" : séances intenses (VMA/seuil/tempo) → "échauff · travail · retour au calme" avec ·. Séances faciles (EF/SL/récup) → une ligne simple sans ·.`;
+Remplace les valeurs par un plan personnalisé et adapté au profil. Règle "detail" : séances intenses (VMA/seuil/tempo) → "échauff · travail · retour au calme" avec ·. Séances faciles (EF/SL/récup) → une ligne simple sans ·.`;
   }
 };
