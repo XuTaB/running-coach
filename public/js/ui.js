@@ -107,6 +107,8 @@ const UI = {
     }
 
     el.innerHTML = countdownHtml + metricsHtml + planHtml + lastActHtml;
+    // Initialise la carte Leaflet de la dernière course (lazy)
+    requestAnimationFrame(() => this.initMapObserver());
   },
 
   // ===== STRAVA TAB =====
@@ -146,6 +148,18 @@ const UI = {
     const suffer       = activity.suffer_score || null;
     const cadence      = activity.average_cadence ? Math.round(activity.average_cadence * 2) : null;
 
+    // Calories & chaussures : absents de la liste Strava → lire le cache détail si dispo
+    let calDisplay  = activity.calories      ? Math.round(activity.calories) + ' kcal' : '--';
+    let gearDisplay = activity.gear?.name    ? activity.gear.name.slice(0, 10)          : '--';
+    try {
+      const cached = localStorage.getItem('strava_detail_v3_' + activity.id);
+      if (cached) {
+        const d = JSON.parse(cached);
+        if (d.calories)    calDisplay  = Math.round(d.calories) + ' kcal';
+        if (d.gear?.name)  gearDisplay = d.gear.name.slice(0, 10);
+      }
+    } catch(e) {}
+
     return `
       <div class="act-card${hasFb ? ' has-feedback' : ''}" id="act-${activity.id}">
         <div class="act-card-header" onclick="UI.toggleActivity(${activity.id})">
@@ -172,14 +186,14 @@ const UI = {
           <div><div class="act-stat-val" style="font-size:13px;">${activity.total_elevation_gain ? Math.round(activity.total_elevation_gain)+'m' : '--'}</div><div class="act-stat-label">dénivelé</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${activity.max_heartrate || '--'}</div><div class="act-stat-label">FC max</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${cadence ? cadence+'/min' : '--'}</div><div class="act-stat-label">cadence</div></div>
-          <div><div id="act-cal-${activity.id}" class="act-stat-val" style="font-size:13px;">${activity.calories ? Math.round(activity.calories)+' kcal' : '--'}</div><div class="act-stat-label">calories</div></div>
+          <div><div id="act-cal-${activity.id}" class="act-stat-val" style="font-size:13px;">${calDisplay}</div><div class="act-stat-label">calories</div></div>
         </div>
         <!-- Stats secondaires ligne 2 -->
         <div style="display:grid;grid-template-columns:repeat(4,1fr);padding:0 16px 12px;gap:4px;border-bottom:0.5px solid var(--border);">
           <div><div class="act-stat-val" style="font-size:13px;">${Strava.formatPace(activity.max_speed)}</div><div class="act-stat-label">allure max</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${suffer || '--'}</div><div class="act-stat-label">suffer</div></div>
           <div><div class="act-stat-val" style="font-size:13px;">${activity.average_temp !== undefined ? activity.average_temp+'°C' : '--'}</div><div class="act-stat-label">temp.</div></div>
-          <div><div id="act-gear-${activity.id}" class="act-stat-val" style="font-size:13px;">${activity.gear?.name ? activity.gear.name.slice(0,8) : '--'}</div><div class="act-stat-label">chaussures</div></div>
+          <div><div id="act-gear-${activity.id}" class="act-stat-val" style="font-size:13px;">${gearDisplay}</div><div class="act-stat-label">chaussures</div></div>
         </div>
 
         <!-- Carte OSM (lazy-init Leaflet au scroll) -->
