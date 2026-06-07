@@ -190,29 +190,99 @@ const UI = {
 
   // Charge et affiche les données détaillées d'une activité
   // ── Graphique Allure + FC + Dénivelé ─────────────────────────────────────────
+  // Utilitaire : moyenne glissante sur un tableau (ignore les null)
+  _movingAvg(arr, win) {
+    return arr.map(function(_, i) {
+      var sum = 0, count = 0, j;
+      for (j = Math.max(0, i - win); j <= Math.min(arr.length - 1, i + win); j++) {
+        if (arr[j] !== null && arr[j] !== undefined) { sum += arr[j]; count++; }
+      }
+      return count > 0 ? sum / count : null;
+    });
+  },
+
+  // Utilitaire : dénivelé SVG commun aux deux graphiques
+  _elevSvg(streams, totalDist, PAD, cW, cH, W, H) {
+    var altData  = (streams.altitude && streams.altitude.data)  || [];
+    var distData = (streams.distance && streams.distance.data)  || [];
+    if (altData.length < 6 || distData.length < 6) return '';
+    var step = Math.max(1, Math.floor(altData.length / 200));
+    var altPts = [];
+    for (var i = 0; i < altData.length; i += step) {
+      if (distData[i] !== undefined) altPts.push({ d: distData[i], a: altData[i] });
+    }
+    if (altPts.length < 3) return '';
+    var aMin = Math.min.apply(null, altPts.map(function(p) { return p.a; }));
+    var aMax = Math.max.apply(null, altPts.map(function(p) { return p.a; }));
+    var aRange = aMax - aMin || 1;
+    var elevH  = cH * 0.5;
+    var bottom = PAD.top + cH;
+    var xOf    = function(d) { return PAD.left + (Math.min(d, totalDist) / totalDist) * cW; };
+    var pathD  = altPts.map(function(p, idx) {
+      var x = xOf(p.d).toFixed(1);
+      var y = (PAD.top + cH - ((p.a - aMin) / aRange) * elevH).toFixed(1);
+      return (idx === 0 ? 'M' : 'L') + x + ',' + y;
+    }).join(' ');
+    var lastX  = xOf(altPts[altPts.length - 1].d).toFixed(1);
+    var firstX = xOf(altPts[0].d).toFixed(1);
+    return '<path d="' + pathD + ' L' + lastX + ',' + bottom + ' L' + firstX + ',' + bottom + ' Z"'
+      + ' fill="rgba(90,140,200,0.12)" stroke="rgba(90,140,200,0.35)" stroke-width="0.8"/>';
+  },
+
+  // Routeur principal
   renderStreamsChart(detail) {
     var streams = detail.streams;
     if (!streams) return '';
-
-    var velData  = (streams.velocity_smooth && streams.velocity_smooth.data)  || [];
-    var hrData   = (streams.heartrate        && streams.heartrate.data)        || [];
-    var altData  = (streams.altitude         && streams.altitude.data)         || [];
-    var distData = (streams.distance         && streams.distance.data)         || [];
-
+    var velData = (streams.velocity_smooth && streams.velocity_smooth.data) || [];
     if (velData.length < 20) return '';
 
-    // Downsampling → ~250 points max
+    // Détection fractionné : workout_type===3 OU haute variance de vitesse sur laps manuels
+    var laps = (detail.laps || []).filter(function(l) { return l.distance > 50 && l.elapsed_time > 5; });
+    var isInterval = false;
+    if (detail.workout_type === 3 && laps.length >= 2) {
+      isInterval = true;
+    } else if (laps.length >= 4) {
+      // Variance des vitesses moyennes : si stddev > 0.5 m/s → fractionné
+      var speeds = laps.map(function(l) { return l.average_speed || 0; }).filter(Boolean);
+      var avg    = speeds.reduce(function(a, b) { return a + b; }, 0) / speeds.length;
+      var stddev = Math.sqrt(speeds.reduce(function(a, b) { return a + Math.pow(b - avg, 2); }, 0) / speeds.length);
+      if (stddev > 0.5) isInterval = true;
+    }
+
+    return isInterval
+      ? this._renderLapChart(detail, laps, streams)
+      : this._renderContinuousChart(detail, streams);
+  },
+
+  // ── Vue continue : allure lissée + FC + dénivelé ──────────────────────────
+  _renderContinuousChart(detail, streams) {
+    var velData  = (streams.velocity_smooth && streams.velocity_smooth.data) || [];
+    var hrData   = (streams.heartrate        && streams.heartrate.data)       || [];
+    var distData = (streams.distance         && streams.distance.data)        || [];
+
+    // Downsampling → ~250 points
     var step = Math.max(1, Math.floor(velData.length / 250));
-    var pts  = [];
+    var raw  = [];
     for (var i = 0; i < velData.length; i += step) {
       var v = velData[i];
-      pts.push({
+      raw.push({
         d:    distData[i] || 0,
-        pace: (v > 0.5) ? 1000 / v : null,   // sec/km, null si arrêté
-        hr:   hrData[i]  || null,
-        alt:  (altData[i] !== undefined && altData[i] !== null) ? altData[i] : null
+        pace: (v > 0.5) ? 1000 / v : null,
+        hr:   hrData[i]  || null
       });
     }
+
+    // Lissage allure (fenêtre 6) + écrêtage des artefacts (3:00–12:00/km)
+    var rawPaces = raw.map(function(p) { return p.pace; });
+    var smPaces  = this._movingAvg(rawPaces, 6);
+    var pts = raw.map(function(p, idx) {
+      var sp = smPaces[idx];
+      return {
+        d:    p.d,
+        pace: (sp && sp >= 180 && sp <= 720) ? sp : null,
+        hr:   p.hr
+      };
+    });
 
     var W = 600, H = 130;
     var PAD = { top: 10, right: 38, bottom: 22, left: 40 };
@@ -222,65 +292,47 @@ const UI = {
     var maxDist = (pts[pts.length - 1] && pts[pts.length - 1].d) ? pts[pts.length - 1].d : 1;
     var xOf = function(d) { return PAD.left + (d / maxDist) * cW; };
 
-    // ── Allure (axe gauche, orange) ───────────────────────────────────────────
-    var validPaces = pts.map(function(p) { return p.pace; }).filter(function(p) { return p && p < 900; });
+    // Allure
+    var validPaces = pts.map(function(p) { return p.pace; }).filter(Boolean);
     if (!validPaces.length) return '';
     var pMin   = Math.min.apply(null, validPaces);
     var pMax   = Math.max.apply(null, validPaces);
     var pRange = pMax - pMin || 30;
-    // Allure inversée : plus lent (valeur haute) = plus bas sur le chart
     var yPace  = function(p) { return PAD.top + ((p - pMin) / pRange) * cH; };
 
-    // ── FC (axe droit, rouge) ─────────────────────────────────────────────────
+    // FC
     var validHR = pts.map(function(p) { return p.hr; }).filter(Boolean);
-    var hrMin   = validHR.length ? Math.max(80,  Math.min.apply(null, validHR) - 5)  : 100;
-    var hrMax   = validHR.length ? Math.min(220, Math.max.apply(null, validHR) + 5)  : 200;
+    var hrMin   = validHR.length ? Math.max(80,  Math.min.apply(null, validHR) - 5) : 100;
+    var hrMax   = validHR.length ? Math.min(220, Math.max.apply(null, validHR) + 5) : 200;
     var hrRange = hrMax - hrMin || 100;
     var yHR     = function(h) { return PAD.top + cH - ((h - hrMin) / hrRange) * cH; };
 
-    // ── Dénivelé (fond) ───────────────────────────────────────────────────────
-    var altPts  = pts.filter(function(p) { return p.alt !== null; });
-    var elevSvg = '';
-    if (altPts.length > 5) {
-      var aMin   = Math.min.apply(null, altPts.map(function(p) { return p.alt; }));
-      var aMax   = Math.max.apply(null, altPts.map(function(p) { return p.alt; }));
-      var aRange = aMax - aMin || 1;
-      var elevH  = cH * 0.55;   // le relief occupe 55% de la hauteur
-      var yAlt   = function(a) { return PAD.top + cH - ((a - aMin) / aRange) * elevH; };
-      var bottom = PAD.top + cH;
-      var leftX  = xOf(altPts[0].d).toFixed(1);
-      var rightX = xOf(altPts[altPts.length - 1].d).toFixed(1);
-      var pathD  = altPts.map(function(p, idx) {
-        return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yAlt(p.alt).toFixed(1);
-      }).join(' ');
-      elevSvg = '<path d="' + pathD + ' L' + rightX + ',' + bottom + ' L' + leftX + ',' + bottom + ' Z"'
-        + ' fill="rgba(90,140,200,0.13)" stroke="rgba(90,140,200,0.4)" stroke-width="1"/>';
-    }
+    // Dénivelé
+    var elevSvg = this._elevSvg(streams, maxDist, PAD, cW, cH, W, H);
 
-    // ── Grille verticale + labels X (km) ─────────────────────────────────────
+    // Grille km
     var totalKm = maxDist / 1000;
     var kmStep  = totalKm > 25 ? 5 : totalKm > 12 ? 2 : 1;
     var gridSvg = '', xLabelSvg = '';
     for (var km = 0; km <= Math.ceil(totalKm); km += kmStep) {
       var xk = xOf(km * 1000).toFixed(1);
       gridSvg   += '<line x1="' + xk + '" y1="' + PAD.top + '" x2="' + xk + '" y2="' + (PAD.top + cH) + '"'
-        + ' stroke="rgba(128,128,128,0.15)" stroke-width="1"/>';
+        + ' stroke="rgba(128,128,128,0.12)" stroke-width="1"/>';
       xLabelSvg += '<text x="' + xk + '" y="' + (H - 5) + '" text-anchor="middle"'
         + ' font-size="9" fill="rgba(128,128,128,0.7)">' + km + 'km</text>';
     }
 
-    // ── Labels Y gauche (allure) ──────────────────────────────────────────────
+    // Labels allure (gauche)
     var pLabelSvg = '';
     [pMin, (pMin + pMax) / 2, pMax].forEach(function(p) {
-      var m     = Math.floor(p / 60);
-      var s     = Math.round(p % 60);
-      var label = m + ':' + (s < 10 ? '0' + s : '' + s);
-      var y     = yPace(p).toFixed(1);
+      var m = Math.floor(p / 60), s = Math.round(p % 60);
+      var y = yPace(p).toFixed(1);
       pLabelSvg += '<text x="' + (PAD.left - 3) + '" y="' + y + '" text-anchor="end"'
-        + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">' + label + '</text>';
+        + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">'
+        + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
     });
 
-    // ── Labels Y droite (FC) ──────────────────────────────────────────────────
+    // Labels FC (droite)
     var hrLabelSvg = '';
     if (validHR.length) {
       [hrMin, Math.round((hrMin + hrMax) / 2), hrMax].forEach(function(h) {
@@ -290,32 +342,36 @@ const UI = {
       });
     }
 
-    // ── Courbe allure ─────────────────────────────────────────────────────────
-    var pacePts = pts.filter(function(p) { return p.pace && p.pace < 900; });
-    var paceSvg = '';
+    // Courbe allure (segments continus séparés aux trous)
+    var pacePts  = pts.filter(function(p) { return p.pace; });
+    var paceSvg  = '';
     if (pacePts.length > 1) {
-      var paceD = pacePts.map(function(p, idx) {
-        return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yPace(p.pace).toFixed(1);
-      }).join(' ');
+      var prevIdx = -2, paceD = '';
+      pts.forEach(function(p, idx) {
+        if (!p.pace) { prevIdx = -2; return; }
+        var cmd = (prevIdx === idx - 1) ? 'L' : 'M';
+        paceD  += cmd + xOf(p.d).toFixed(1) + ',' + yPace(p.pace).toFixed(1) + ' ';
+        prevIdx = idx;
+      });
       paceSvg = '<path d="' + paceD + '" fill="none" stroke="rgba(249,115,22,0.9)"'
-        + ' stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>';
+        + ' stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>';
     }
 
-    // ── Courbe FC ─────────────────────────────────────────────────────────────
+    // Courbe FC
     var hrPts = pts.filter(function(p) { return p.hr; });
     var hrSvg = '';
     if (hrPts.length > 1) {
       var hrD = hrPts.map(function(p, idx) {
         return (idx === 0 ? 'M' : 'L') + xOf(p.d).toFixed(1) + ',' + yHR(p.hr).toFixed(1);
       }).join(' ');
-      hrSvg = '<path d="' + hrD + '" fill="none" stroke="rgba(239,68,68,0.85)"'
-        + ' stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5,2"/>';
+      hrSvg = '<path d="' + hrD + '" fill="none" stroke="rgba(239,68,68,0.8)"'
+        + ' stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4,2"/>';
     }
 
-    // ── Légende ───────────────────────────────────────────────────────────────
+    // Légende
     var legendParts = ['<span style="color:rgba(249,115,22,0.95);font-weight:600;">— Allure</span>'];
-    if (hrPts.length  > 1) legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">--- FC</span>');
-    if (altPts.length > 5) legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
+    if (hrPts.length  > 1)  legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">--- FC</span>');
+    if (elevSvg)             legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
     var legend = '<div style="display:flex;gap:14px;margin-bottom:5px;font-size:11px;">' + legendParts.join('') + '</div>';
 
     return '<div style="margin-bottom:14px;">'
@@ -325,6 +381,144 @@ const UI = {
       + '<div style="background:var(--bg2);border-radius:8px;padding:6px;overflow:hidden;">'
       + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" preserveAspectRatio="xMidYMid meet">'
       + elevSvg + gridSvg + hrSvg + paceSvg + pLabelSvg + hrLabelSvg + xLabelSvg
+      + '</svg>'
+      + '</div>'
+      + '</div>';
+  },
+
+  // ── Vue fractionné : bâtons par tour + courbe FC + dénivelé ──────────────
+  _renderLapChart(detail, laps, streams) {
+    if (laps.length < 2) return this._renderContinuousChart(detail, streams);
+
+    var W = 600, H = 140;
+    var PAD = { top: 10, right: 38, bottom: 24, left: 40 };
+    var cW = W - PAD.left - PAD.right;
+    var cH = H - PAD.top  - PAD.bottom;
+
+    var totalDist = laps.reduce(function(s, l) { return s + (l.distance || 0); }, 0) || 1;
+
+    // Vitesses et allures par tour
+    var lapSpeeds = laps.map(function(l) { return l.average_speed || 0; });
+    var lapPaces  = lapSpeeds.map(function(v) { return v > 0.3 ? 1000 / v : null; });
+    var lapHRs    = laps.map(function(l) { return l.average_heartrate || null; });
+
+    var validSpeeds = lapSpeeds.filter(Boolean);
+    if (!validSpeeds.length) return this._renderContinuousChart(detail, streams);
+    var sMin = Math.min.apply(null, validSpeeds);
+    var sMax = Math.max.apply(null, validSpeeds);
+    var sRange = sMax - sMin || 0.1;
+
+    // FC
+    var validHR = lapHRs.filter(Boolean);
+    var hrMin   = validHR.length ? Math.max(80,  Math.min.apply(null, validHR) - 10) : 100;
+    var hrMax   = validHR.length ? Math.min(220, Math.max.apply(null, validHR) + 10) : 200;
+    var hrRange = hrMax - hrMin || 100;
+    var yHR     = function(h) { return PAD.top + cH - ((h - hrMin) / hrRange) * cH; };
+
+    // Dénivelé
+    var elevSvg = this._elevSvg(streams, totalDist, PAD, cW, cH, W, H);
+
+    // Bâtons (largeur proportionnelle à la distance du tour)
+    var GUTTER  = 3;
+    var barsSvg = '', hrPts = [], labelsSvg = '';
+    var xCursor = 0;
+
+    laps.forEach(function(lap, idx) {
+      var speed  = lapSpeeds[idx];
+      var pace   = lapPaces[idx];
+      var hr     = lapHRs[idx];
+      var barX   = PAD.left + (xCursor / totalDist) * cW;
+      var barW   = (lap.distance / totalDist) * cW;
+      var barInW = Math.max(1, barW - GUTTER);
+
+      // Hauteur proportionnelle à la vitesse (rapide = haut)
+      var barH = sRange > 0 ? ((speed - sMin) / sRange) * cH * 0.85 : cH * 0.4;
+      barH = Math.max(3, barH);
+      var barY = PAD.top + cH - barH;
+
+      // Couleur : tour rapide = orange / tour lent = gris
+      var avgSpeed = (sMin + sMax) / 2;
+      var color = speed > avgSpeed ? 'rgba(249,115,22,0.82)' : 'rgba(150,150,160,0.45)';
+
+      barsSvg += '<rect x="' + (barX + GUTTER / 2).toFixed(1) + '" y="' + barY.toFixed(1) + '"'
+        + ' width="' + barInW.toFixed(1) + '" height="' + barH.toFixed(1) + '"'
+        + ' rx="2" fill="' + color + '"/>';
+
+      // Allure au centre du bâton (si assez large)
+      if (barW > 22 && pace) {
+        var m = Math.floor(pace / 60), s = Math.round(pace % 60);
+        var px = (barX + barW / 2).toFixed(1);
+        var py = (barY + Math.min(barH / 2, 14) + 3).toFixed(1);
+        labelsSvg += '<text x="' + px + '" y="' + py + '" text-anchor="middle"'
+          + ' font-size="8" fill="rgba(255,255,255,0.92)">'
+          + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
+      }
+
+      // Numéro de tour en bas
+      if (barW > 14) {
+        labelsSvg += '<text x="' + (barX + barW / 2).toFixed(1) + '" y="' + (H - 6) + '"'
+          + ' text-anchor="middle" font-size="8" fill="rgba(128,128,128,0.75)">' + (idx + 1) + '</text>';
+      }
+
+      // Point FC au centre du bâton
+      if (hr) hrPts.push({ x: barX + barW / 2, y: yHR(hr) });
+
+      xCursor += lap.distance;
+    });
+
+    // Courbe FC (ligne + points)
+    var hrLineSvg = '';
+    if (hrPts.length > 1) {
+      var hrD = hrPts.map(function(p, idx) {
+        return (idx === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
+      }).join(' ');
+      hrLineSvg = '<path d="' + hrD + '" fill="none" stroke="rgba(239,68,68,0.85)"'
+        + ' stroke-width="1.4" stroke-linejoin="round" stroke-dasharray="4,2"/>';
+      hrPts.forEach(function(p) {
+        hrLineSvg += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1)
+          + '" r="2.5" fill="rgba(239,68,68,0.9)"/>';
+      });
+    }
+
+    // Labels Y allure (gauche) : min/mid/max vitesse → allure
+    var pLabelSvg = '';
+    var speedToBarTopY = function(speed) {
+      var h = sRange > 0 ? ((speed - sMin) / sRange) * cH * 0.85 : cH * 0.4;
+      return PAD.top + cH - Math.max(3, h);
+    };
+    [sMin, (sMin + sMax) / 2, sMax].forEach(function(sp) {
+      if (!sp) return;
+      var pace = 1000 / sp;
+      var m = Math.floor(pace / 60), s = Math.round(pace % 60);
+      var y = speedToBarTopY(sp).toFixed(1);
+      pLabelSvg += '<text x="' + (PAD.left - 3) + '" y="' + y + '" text-anchor="end"'
+        + ' dominant-baseline="middle" font-size="8" fill="rgba(249,115,22,0.9)">'
+        + m + ':' + (s < 10 ? '0' + s : '' + s) + '</text>';
+    });
+
+    // Labels Y FC (droite)
+    var hrLabelSvg = '';
+    if (hrPts.length > 1) {
+      [hrMin, Math.round((hrMin + hrMax) / 2), hrMax].forEach(function(h) {
+        var y = yHR(h).toFixed(1);
+        hrLabelSvg += '<text x="' + (W - PAD.right + 4) + '" y="' + y + '"'
+          + ' dominant-baseline="middle" font-size="8" fill="rgba(239,68,68,0.9)">' + Math.round(h) + '</text>';
+      });
+    }
+
+    // Légende
+    var legendParts = ['<span style="color:rgba(249,115,22,0.95);font-weight:600;">█ Allure / tour</span>'];
+    if (hrPts.length > 1) legendParts.push('<span style="color:rgba(239,68,68,0.9);font-weight:600;">--- FC moy</span>');
+    if (elevSvg)          legendParts.push('<span style="color:rgba(90,140,200,0.8);">▨ Dénivelé</span>');
+    var legend = '<div style="display:flex;gap:14px;margin-bottom:5px;font-size:11px;">' + legendParts.join('') + '</div>';
+
+    return '<div style="margin-bottom:14px;">'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px;'
+      + 'text-transform:uppercase;letter-spacing:0.05em;">Analyse par tour</div>'
+      + legend
+      + '<div style="background:var(--bg2);border-radius:8px;padding:6px;overflow:hidden;">'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" preserveAspectRatio="xMidYMid meet">'
+      + elevSvg + barsSvg + hrLineSvg + pLabelSvg + hrLabelSvg + labelsSvg
       + '</svg>'
       + '</div>'
       + '</div>';
