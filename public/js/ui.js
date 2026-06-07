@@ -276,15 +276,10 @@ const UI = {
 
         <!-- Ressenti global -->
         <div class="fb-section">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-            <span class="fb-label">Ressenti global</span>
-            <span style="font-size:22px;font-weight:700;color:var(--orange);" id="sv-${aid}">${v.effort ?? 3}</span>
-          </div>
-          <input type="range" min="1" max="5" step="1" value="${v.effort ?? 3}" style="width:100%;"
-            oninput="document.getElementById('sv-${aid}').textContent=this.value;UI.setFeedbackVal(${aid},'effort',+this.value)">
-          <div style="display:flex;justify-content:space-between;margin-top:4px;">
-            ${['1 – Très mauvaise','2 – Difficile','3 – Correcte','4 – Bonne','5 – Excellente'].map((l,i) =>
-              `<div style="text-align:center;width:18%;"><div style="font-size:13px;font-weight:700;color:var(--orange);">${i+1}</div><div style="font-size:9px;color:var(--text-hint);line-height:1.2;">${l.split(' – ')[1]}</div></div>`
+          <span class="fb-label">Ressenti global</span>
+          <div class="chips" id="effort-chips-${aid}" style="margin-top:6px;">
+            ${[[1,'😣 Très mauvaise'],[2,'😕 Difficile'],[3,'🙂 Correcte'],[4,'😊 Bonne'],[5,'🌟 Excellente']].map(([val,label]) =>
+              `<div class="chip${v.effort===val?' active-soft':''}" onclick="UI.setFeedback(${aid},'effort',${val},this,false);UI.setFeedbackVal(${aid},'effort',${val})">${label}</div>`
             ).join('')}
           </div>
         </div>
@@ -322,6 +317,7 @@ const UI = {
             <div class="chip${(v.painAreas||[]).includes('tendons') ? ' danger' : ''}"  onclick="UI.togglePainArea(${aid},'tendons',this)">🦶 Tendons</div>
             <div class="chip${(v.painAreas||[]).includes('back') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'back',this)">🔙 Dos</div>
             <div class="chip${(v.painAreas||[]).includes('hips') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'hips',this)">🍑 Hanches</div>
+            <div class="chip${(v.painAreas||[]).includes('sick') ? ' danger' : ''}"      onclick="UI.togglePainArea(${aid},'sick',this)">🤒 Malade</div>
             <div class="chip${(v.painAreas||[]).includes('none') ? ' active-soft' : ''}" onclick="UI.togglePainArea(${aid},'none',this)">✅ Aucune</div>
           </div>
           ${(v.painAreas||[]).filter(p => p !== 'none').length > 0 ? `
@@ -349,6 +345,7 @@ const UI = {
             ${chip('weather','hot','🌡️ Chaud')}
             ${chip('weather','cloudy','🌥 Nuageux')}
             ${chip('weather','rain','🌧 Pluie')}
+            ${chip('weather','humid','💧 Humide/Lourd')}
             ${chip('weather','wind','💨 Vent')}
             ${chip('weather','cold','🥶 Froid')}
           </div>
@@ -362,15 +359,10 @@ const UI = {
           </div>
 
           <div class="fb-section" style="margin-bottom:0;">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-              <span class="fb-label" style="font-size:13px;">Fatigue avant la course</span>
-              <span style="font-size:18px;font-weight:700;color:var(--orange);" id="fv-${aid}">${v.fatigue ?? 2}</span>
-            </div>
-            <input type="range" min="1" max="5" step="1" value="${v.fatigue ?? 2}" style="width:100%;"
-              oninput="document.getElementById('fv-${aid}').textContent=this.value;UI.setFeedbackVal(${aid},'fatigue',+this.value)">
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-              ${['1 – Reposé','2 – Ok','3 – Moyen','4 – Fatigué','5 – Épuisé'].map((l,i) =>
-                `<div style="text-align:center;width:18%;"><div style="font-size:13px;font-weight:700;color:var(--orange);">${i+1}</div><div style="font-size:9px;color:var(--text-hint);line-height:1.2;">${l.split(' – ')[1]}</div></div>`
+            <span class="fb-label" style="font-size:13px;">Fatigue avant la course</span>
+            <div class="chips" id="fatigue-chips-${aid}" style="margin-top:6px;">
+              ${[[1,'✨ Reposé'],[2,'👌 Ok'],[3,'😐 Moyen'],[4,'😓 Fatigué'],[5,'💀 Épuisé']].map(([val,label]) =>
+                `<div class="chip${v.fatigue===val?' active-soft':''}" onclick="UI.setFeedback(${aid},'fatigue',${val},this,false);UI.setFeedbackVal(${aid},'fatigue',${val})">${label}</div>`
               ).join('')}
             </div>
           </div>
