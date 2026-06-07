@@ -144,9 +144,11 @@ INTERDIT pour les séances intenses : "puis", virgules comme séparateur de phas
   },
 
   async analyzeActivity(activity, feedback) {
-    const profile = Storage.getProfile();
+    const profile    = Storage.getProfile();
+    const allActs    = Storage.getActivities();
+    const actDate    = new Date(activity.start_date_local);
 
-    // Charge les données détaillées Strava (splits, zones FC, etc.)
+    // Données riches Strava (splits, zones FC, streams…)
     let richContext = '';
     try {
       const detail = await Strava.fetchActivityDetail(activity.id);
@@ -154,111 +156,182 @@ INTERDIT pour les séances intenses : "puis", virgules comme séparateur de phas
     } catch(e) {
       console.warn('Détail non disponible, utilise données basiques');
     }
-
-    // Fallback si pas de détail
     if (!richContext) {
       richContext = `DONNÉES DE LA COURSE :
 - Date : ${Strava.formatDate(activity.start_date_local)}
 - Distance : ${Strava.formatDistance(activity.distance)} km
 - Durée : ${Strava.formatDuration(activity.moving_time)}
-- Allure moy : ${Strava.formatPace(activity.average_speed)} /km
-- FC moy : ${activity.average_heartrate || 'N/A'} bpm
-- Dénivelé : ${Math.round(activity.total_elevation_gain || 0)}m`;
+- Allure moy : ${Strava.formatPace(activity.average_speed)}/km
+- FC moy/max : ${activity.average_heartrate ? Math.round(activity.average_heartrate) : 'N/A'} / ${activity.max_heartrate || 'N/A'} bpm
+- Dénivelé : +${Math.round(activity.total_elevation_gain || 0)}m
+- Cadence : ${activity.average_cadence ? Math.round(activity.average_cadence * 2) + ' spm' : 'N/A'}
+- Calories : ${activity.calories || 'N/A'} kcal
+- Suffer score : ${activity.suffer_score || 'N/A'}`;
+    }
+
+    // Séance prévue ce jour (si le plan existe)
+    let plannedStr = '';
+    const plan = Storage.getPlan();
+    if (plan && plan.weeks) {
+      const dayNames = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+      const dayKey   = dayNames[actDate.getDay()];
+      plan.weeks.forEach(function(w) {
+        (w.days || []).forEach(function(d) {
+          if (d.day === dayKey && !plannedStr) {
+            plannedStr = '\nSÉANCE PRÉVUE CE JOUR : ' + d.label + (d.detail ? ' — ' + d.detail : '');
+          }
+        });
+      });
+    }
+
+    // Contexte de charge récente (3 dernières courses avant celle-ci)
+    const prevActs = allActs.filter(a => a.id !== activity.id && new Date(a.start_date_local) < actDate).slice(0, 3);
+    let chargeStr = '';
+    if (prevActs.length > 0) {
+      // Jours depuis la dernière sortie
+      const daysSinceLast = Math.round((actDate - new Date(prevActs[0].start_date_local)) / 86400000);
+      chargeStr = '\nCHARGE RÉCENTE (avant cette séance) :'
+        + '\n- Repos depuis dernière course : ' + daysSinceLast + ' jour(s)'
+        + '\n- 3 dernières sorties :';
+      prevActs.forEach(function(a) {
+        const fb = Storage.getFeedback(a.id);
+        chargeStr += '\n  · ' + Strava.formatDate(a.start_date_local)
+          + ' : ' + Strava.formatDistance(a.distance) + 'km '
+          + Strava.formatPace(a.average_speed) + '/km'
+          + (a.average_heartrate ? ' FC' + Math.round(a.average_heartrate) + 'bpm' : '')
+          + (fb ? ' [ressenti ' + (fb.effort||'?') + '/5]' : '');
+      });
+      // Km des 7 derniers jours
+      const weekKm = allActs
+        .filter(a => (actDate - new Date(a.start_date_local)) < 7 * 86400000)
+        .reduce(function(s, a) { return s + (a.distance || 0); }, 0) / 1000;
+      chargeStr += '\n- Km sur les 7 derniers jours (incluant cette séance) : ' + weekKm.toFixed(1) + ' km';
     }
 
     const feedbackStr = `
 RESSENTIS ATHLÈTE :
-- Effort global : ${feedback.effort}/10 (0=très dur, 10=parfait)
+- Effort global : ${feedback.effort}/5 (1=très dur, 5=parfait)
 - Cardio : ${feedback.cardio || 'non renseigné'}
 - Jambes : ${feedback.legs || 'non renseigné'}
 - Mental : ${feedback.mental || 'non renseigné'}
 - Douleurs : ${(feedback.painAreas||[]).join(', ') || 'Aucune'}${feedback.painDetail ? ' — '+feedback.painDetail : ''}
-- Sommeil : ${feedback.sleep || 'non renseigné'}
-- Fatigue avant course : ${feedback.fatigue}/10
+- Sommeil avant : ${feedback.sleep || 'non renseigné'}
+- Fatigue avant course : ${feedback.fatigue}/5
 - Météo : ${feedback.weather || 'non renseigné'}
-- Commentaire : ${feedback.comment || '-'}`;
+- Commentaire libre : ${feedback.comment || '-'}`;
 
-    const prompt = `${richContext}
-${feedbackStr}
+    const prompt = `${richContext}${plannedStr}${chargeStr}${feedbackStr}
 
-MON PROFIL : objectif ${profile?.goal?.name || 'marathon'} le ${profile?.goal?.date || '-'}, niveau ${profile?.level || 'intermédiaire'}, records : 10km ${profile?.prs?.km10 || 'NC'}, semi ${profile?.prs?.semi || 'NC'}.
+Analyse cette séance en croisant toutes les données objectives (allure, FC split par split, zones, dénivelé, suffer score) avec les ressentis subjectifs et le contexte de charge récente.
 
-Analyse cette séance en croisant les données objectives (allure, FC, splits) avec mes ressentis. Donne-moi :
-1. Ce que révèlent les données (points positifs et alertes)
-2. Comment adapter ma prochaine séance en fonction de ça`;
+Structure ta réponse en 3 points concis :
+1. 📊 Ce que disent les données (performance, FC, cohérence allure/effort)
+2. ⚠️ Points d'attention (signes de fatigue, douleurs, écarts vs prévu)
+3. 🎯 Recommandation pour la prochaine séance`;
 
     return this.sendMessage(prompt);
   },
 
   buildContext(profile) {
     if (!profile) return '';
-    const p = profile;
-    const prs = p.prs || {};
-    const schedule = p.schedule || {};
+    const p    = profile;
+    const prs  = p.prs || {};
+    const sched = p.schedule || {};
+    const now  = new Date();
 
     const lines = [
-      'PROFIL ATHLETE :',
+      '=== CONTEXTE ATHLÈTE ===',
+      '',
+      'PROFIL :',
       'Nom: ' + (p.name||'NC') + ' | Age: ' + (p.age||'NC') + ' ans | Sexe: ' + (p.sex||'NC') + ' | Taille: ' + (p.height||'NC') + ' cm | Poids: ' + (p.weight||'NC') + ' kg',
       'FC max: ' + (p.hrMax||p.fcMax||'NC') + ' bpm | FC repos: ' + (p.hrRest||p.fcRest||'NC') + ' bpm',
-      'Experience: ' + (p.experience||'NC') + ' | Court depuis: ' + (p.runningSince||'NC') + ' | Volume: ' + (p.weeklyKm||'NC') + ' km/sem',
-      'Sports paralleles: ' + ((p.otherSports||[]).join(', ')||'aucun') + (p.otherSportsNote ? ' ('+p.otherSportsNote+')' : ''),
-      'Blessures: ' + ((p.injuries||[]).join(', ')||'aucune') + (p.injuriesNote ? ' - '+p.injuriesNote : ''),
-      'Contexte: famille=' + (p.family||'NC') + ' | travail=' + (p.workload||'NC') + ' | stress=' + (p.stress||'NC') + (p.constraintsNote ? ' | '+p.constraintsNote : ''),
+      'Expérience: ' + (p.experience||'NC') + ' | Court depuis: ' + (p.runningSince||'NC') + ' | Volume habituel: ' + (p.weeklyKm||'NC') + ' km/sem',
+      'Sports parallèles: ' + ((p.otherSports||[]).join(', ')||'aucun') + (p.otherSportsNote ? ' ('+p.otherSportsNote+')' : ''),
+      'Blessures/fragilités: ' + ((p.injuries||[]).join(', ')||'aucune') + (p.injuriesNote ? ' — '+p.injuriesNote : ''),
+      'Contexte vie: famille=' + (p.family||'NC') + ' | travail=' + (p.workload||'NC') + ' | stress=' + (p.stress||'NC') + (p.constraintsNote ? ' | note: '+p.constraintsNote : ''),
     ];
 
+    // Objectif
     lines.push('');
-    lines.push('OBJECTIF PRINCIPAL :');
+    lines.push('OBJECTIF :');
     if (p.goalMain === 'race' && p.goal) {
       const g = p.goal;
-      lines.push('Course: ' + (g.name||'NC') + ' (' + (g.dist||'NC') + ') le ' + (g.date||'NC'));
-      if (g.targetType === 'finish') lines.push('Objectif: Finir');
+      const weeksLeft = g.date ? Math.round((new Date(g.date) - now) / 604800000) : null;
+      lines.push('Course: ' + (g.name||'NC') + ' (' + (g.dist||'NC') + ') le ' + (g.date||'NC') + (weeksLeft !== null ? ' — dans ' + weeksLeft + ' semaines' : ''));
+      if (g.targetType === 'finish') lines.push('Objectif: Terminer');
       else if (g.targetType === 'target') lines.push('Chrono cible: ' + (g.targetA||'NC'));
       else if (g.targetType === 'range') lines.push('Objectif A: ' + (g.targetA||'NC') + ' | Objectif B: ' + (g.targetB||'NC'));
       if (g.terrain) lines.push('Terrain: ' + g.terrain);
-      if (g.note) lines.push('Note: ' + g.note);
+      if (g.note) lines.push('Note course: ' + g.note);
     } else if (p.goalMain === 'fitness') {
-      lines.push('Maintien forme | Focus: ' + ((p.fitFocus||[]).join(', ')||'NC') + ' | Intensite: ' + (p.fitLevel||'NC'));
+      lines.push('Maintien forme | Focus: ' + ((p.fitFocus||[]).join(', ')||'NC') + ' | Intensité: ' + (p.fitLevel||'NC'));
     } else if (p.goalMain === 'start') {
-      lines.push('Debutant | Profil: ' + (p.startLevel||'NC') + ' | Ambition 6 mois: ' + (p.startAmbition||'NC'));
+      lines.push('Débutant | Profil: ' + (p.startLevel||'NC') + ' | Ambition 6 mois: ' + (p.startAmbition||'NC'));
     }
-
     if (p.goal2) {
-      lines.push('OBJECTIF SECONDAIRE: ' + (p.goal2.name||'NC') + ' (' + (p.goal2.dist||'NC') + ') le ' + (p.goal2.date||'NC') + ' - cible: ' + (p.goal2.target||'NC'));
+      lines.push('Objectif secondaire: ' + (p.goal2.name||'NC') + ' (' + (p.goal2.dist||'NC') + ') le ' + (p.goal2.date||'NC') + ' — cible: ' + (p.goal2.target||'NC'));
     }
 
-    const schedEntries = Object.entries(schedule);
+    // Planning hebdo
+    const schedEntries = Object.entries(sched);
     if (schedEntries.length > 0) {
-      const typeLabel = { ef: 'Endurance fondamentale', sl: 'Sortie longue', work: 'Fractionne/VMA', free: 'Au choix' };
+      const typeLabel = { ef: 'Endurance fondamentale', sl: 'Sortie longue', work: 'Fractionné/VMA', free: 'Au choix' };
       lines.push('');
       lines.push('PLANNING HEBDO :');
       schedEntries.forEach(function(e) { lines.push('- ' + e[0] + ': ' + (typeLabel[e[1]]||e[1])); });
     }
 
+    // Références de niveau
     lines.push('');
-    lines.push('REFERENCES DE NIVEAU :');
-    lines.push('10km: ' + (prs.km10||prs['10km']||'NC') + ' | Semi: ' + (prs.half||prs.semi||'NC') + ' | Marathon: ' + (prs.marathon||'NC') + (p.vma ? ' | VMA: '+p.vma+' km/h' : '') + (p.efPace ? ' | Allure EF: '+p.efPace+'/km' : ''));
+    lines.push('RÉFÉRENCES DE NIVEAU :');
+    lines.push('10km: ' + (prs.km10||prs['10km']||'NC')
+      + ' | Semi: ' + (prs.half||prs.semi||'NC')
+      + ' | Marathon: ' + (prs.marathon||'NC')
+      + (p.vma    ? ' | VMA: '      + p.vma    + ' km/h'  : '')
+      + (p.efPace ? ' | Allure EF: '+ p.efPace + '/km'    : ''));
 
-    const activities = Storage.getActivities().slice(0, 5);
+    // Dernières courses (8 max)
+    const activities = Storage.getActivities().slice(0, 8);
     if (activities.length > 0) {
       lines.push('');
-      lines.push('DERNIERES COURSES :');
+      lines.push('DERNIÈRES COURSES (8 dernières) :');
       activities.forEach(function(a) {
         const fb  = Storage.getFeedback(a.id);
-        const cad = a.average_cadence ? Math.round(a.average_cadence * 2) + '/min' : '';
-        let line  = '- ' + Strava.formatDate(a.start_date_local) + ': ' + Strava.formatDistance(a.distance) + 'km, allure ' + Strava.formatPace(a.average_speed) + '/km, FC moy ' + (a.average_heartrate ? Math.round(a.average_heartrate)+'bpm' : 'NC') + '/max ' + (a.max_heartrate||'NC') + 'bpm, denivele +' + Math.round(a.total_elevation_gain||0) + 'm' + (cad ? ', cadence '+cad : '');
+        const cad = a.average_cadence ? Math.round(a.average_cadence * 2) + 'spm' : '';
+        const suf = a.suffer_score    ? 'suffer=' + a.suffer_score : '';
+        const cal = a.calories        ? a.calories + 'kcal' : '';
+        let line  = '- ' + Strava.formatDate(a.start_date_local)
+          + ': ' + Strava.formatDistance(a.distance) + 'km'
+          + ', allure ' + Strava.formatPace(a.average_speed) + '/km'
+          + ', FC ' + (a.average_heartrate ? Math.round(a.average_heartrate) + '/' + (a.max_heartrate||'?') + ' bpm' : 'NC')
+          + ', D+ ' + Math.round(a.total_elevation_gain||0) + 'm'
+          + (cad ? ', ' + cad : '')
+          + (suf ? ', ' + suf : '')
+          + (cal ? ', ' + cal : '');
         if (fb) {
-          line += ' | Ressenti ' + (fb.effort||'-') + '/5, cardio:' + (fb.cardio||'-') + ', jambes:' + (fb.legs||'-') + ', mental:' + (fb.mental||'-') + ', douleurs:' + ((fb.painAreas||[]).join(',')||'aucune') + ', sommeil:' + (fb.sleep||'-') + ', fatigue:' + (fb.fatigue||'-') + '/5' + (fb.comment ? ', "'+fb.comment+'"' : '');
+          line += ' → ressenti: effort=' + (fb.effort||'-') + '/5'
+            + ' cardio=' + (fb.cardio||'-')
+            + ' jambes=' + (fb.legs||'-')
+            + ' mental=' + (fb.mental||'-')
+            + ' sommeil=' + (fb.sleep||'-')
+            + ' fatigue=' + (fb.fatigue||'-') + '/5'
+            + (fb.painAreas && fb.painAreas.length ? ' douleurs=' + fb.painAreas.join(',') : '')
+            + (fb.comment ? ' · "' + fb.comment + '"' : '');
         }
         lines.push(line);
       });
     }
 
+    // Plan en cours (les 2 semaines)
     const plan = Storage.getPlan();
-    if (plan && plan.weeks && plan.weeks[0]) {
+    if (plan && plan.weeks && plan.weeks.length > 0) {
       lines.push('');
       lines.push('PLAN EN COURS :');
-      plan.weeks[0].days.forEach(function(d) {
-        lines.push('- ' + d.day + ': ' + d.label + (d.detail ? ' - ' + d.detail : ''));
+      plan.weeks.forEach(function(w, wi) {
+        lines.push((wi === 0 ? 'Semaine courante' : 'Semaine ' + (wi + 1)) + ' (' + (w.title||'') + ', ' + (w.volume_km||'?') + ' km) :');
+        (w.days || []).forEach(function(d) {
+          lines.push('  ' + d.day + ': ' + d.label + (d.detail ? ' — ' + d.detail.substring(0, 80) + (d.detail.length > 80 ? '…' : '') : ''));
+        });
       });
     }
 
@@ -285,32 +358,79 @@ Analyse cette séance en croisant les données objectives (allure, FC, splits) a
       ? schedEntries.map(([day, type]) => `  - ${day} : ${typeLabel[type] || type}`).join('\n')
       : '  - Mar : Fractionné/VMA\n  - Jeu : Endurance fondamentale\n  - Sam : Sortie longue';
 
-    return `En tant que coach running, génère la prochaine semaine d'entraînement sur mesure.
+    // Semaines restantes avant la course
+    const weeksLeft = profile?.goal?.date
+      ? Math.round((new Date(profile.goal.date) - new Date()) / 604800000)
+      : null;
 
-PROFIL :
-- Objectif : ${profile?.goal?.name || 'marathon'} le ${profile?.goal?.date || 'non défini'}
-- Chrono cible : ${profile?.goal?.target || 'finir'}
-- Niveau : ${profile?.level || 'intermédiaire'}
-- Records : 10km ${profile?.prs?.km10 || 'NC'}, Semi ${profile?.prs?.semi || 'NC'}, Marathon ${profile?.prs?.marathon || 'NC'}
-- FC max : ${profile?.fcMax || 'NC'} bpm
-- Fragilités : ${profile?.injuries?.join(', ') || 'aucune'}
+    // Historique enrichi (FC + feedback pour chaque course)
+    const richHistory = activities.slice(0, 8).map(a => {
+      const fb = Storage.getFeedback(a.id);
+      let line = '- ' + Strava.formatDate(a.start_date_local)
+        + ': ' + Strava.formatDistance(a.distance) + 'km'
+        + ' allure ' + Strava.formatPace(a.average_speed) + '/km'
+        + (a.average_heartrate ? ' FC' + Math.round(a.average_heartrate) + 'bpm' : '')
+        + ' D+' + Math.round(a.total_elevation_gain||0) + 'm'
+        + (a.suffer_score ? ' suffer=' + a.suffer_score : '');
+      if (fb) {
+        line += ' [effort=' + (fb.effort||'-') + '/5'
+          + ' jambes=' + (fb.legs||'-')
+          + ' cardio=' + (fb.cardio||'-')
+          + ' fatigue=' + (fb.fatigue||'-') + '/5'
+          + (fb.painAreas && fb.painAreas.length ? ' douleurs=' + fb.painAreas.join(',') : '')
+          + (fb.comment ? ' "' + fb.comment + '"' : '') + ']';
+      }
+      return line;
+    }).join('\n') || '- Aucun historique';
+
+    // Plan actuel (pour construire la progression)
+    const currentPlan = Storage.getPlan();
+    let currentPlanStr = '';
+    if (currentPlan && currentPlan.weeks) {
+      currentPlanStr = '\nPLAN ACTUEL (à faire évoluer en progression) :';
+      currentPlan.weeks.forEach(function(w, i) {
+        currentPlanStr += '\n  S' + (i+1) + ' (' + (w.volume_km||'?') + ' km): '
+          + (w.days||[]).map(d => d.day + '=' + d.label).join(', ');
+      });
+    }
+
+    return `En tant que coach running expert, génère un plan d'entraînement personnalisé sur 2 semaines.
+
+PROFIL COMPLET :
+- Age: ${profile?.age||'NC'} ans | Poids: ${profile?.weight||'NC'} kg | Sexe: ${profile?.sex||'NC'}
+- Expérience: ${profile?.experience||'NC'} | Court depuis: ${profile?.runningSince||'NC'}
+- Volume habituel: ${profile?.weeklyKm||'NC'} km/sem
+- FC max: ${profile?.fcMax||profile?.hrMax||'NC'} bpm | FC repos: ${profile?.hrRest||profile?.fcRest||'NC'} bpm
+- Blessures/fragilités: ${(profile?.injuries||[]).join(', ')||'aucune'}${profile?.injuriesNote ? ' — '+profile.injuriesNote : ''}
+- Contexte: famille=${profile?.family||'NC'} | travail=${profile?.workload||'NC'} | stress=${profile?.stress||'NC'}${profile?.constraintsNote ? ' | '+profile.constraintsNote : ''}
+
+OBJECTIF :
+- Course: ${profile?.goal?.name||'NC'} (${profile?.goal?.dist||'NC'}) le ${profile?.goal?.date||'NC'}${weeksLeft !== null ? ' → ' + weeksLeft + ' semaines restantes' : ''}
+- Chrono cible: ${profile?.goal?.targetA || profile?.goal?.target || 'finir'}
+${profile?.goal2 ? '- Objectif secondaire: ' + profile.goal2.name + ' (' + profile.goal2.dist + ') le ' + profile.goal2.date : ''}
+
+RÉFÉRENCES DE NIVEAU :
+- 10km: ${profile?.prs?.km10||'NC'} | Semi: ${profile?.prs?.half||profile?.prs?.semi||'NC'} | Marathon: ${profile?.prs?.marathon||'NC'}
+- VMA: ${profile?.vma||'NC'} km/h | Allure EF cible: ${profile?.efPace||'NC'}/km
 
 PLANNING HEBDO IMPOSÉ (RESPECTER OBLIGATOIREMENT) :
 ${schedLines}
+Contrainte absolue : ${schedEntries.map(([d,t])=>d+'→type="'+t+'"').join(' | ')}
+${currentPlanStr}
 
-${lastRunStr}
+HISTORIQUE DES 8 DERNIÈRES COURSES :
+${richHistory}
 
-HISTORIQUE RÉCENT :
-${historyStr}
-
-CONSIGNES IMPORTANTES :
+CONSIGNES :
 - Inclure UNIQUEMENT les jours du planning hebdo ci-dessus
-- Le champ "type" JSON DOIT correspondre EXACTEMENT au planning : ${schedEntries.map(([d,t])=>'"'+d+'"→type="'+t+'"').join(', ')}
-- NE PAS inverser les types entre les jours — c'est une contrainte absolue
+- NE PAS changer le type de séance par jour — c'est une contrainte absolue
 - PAS de jours de repos dans le plan
-- Adapter l'intensité selon le dernier run et les feedbacks
-- Si douleurs signalées → réduire l'intensité ou proposer récup active
-- Allures précises basées sur le niveau et les records
+- Adapter l'intensité selon la charge récente, les ressentis et les douleurs signalées
+- Si douleurs → réduire intensité ou proposer récup active
+- Allures précises déduites des records et VMA
+- Progression logique si un plan existe déjà
+${weeksLeft !== null && weeksLeft <= 3 ? '- ATTENTION : course dans ' + weeksLeft + ' semaine(s) → phase d\'affûtage, réduire les volumes' : ''}
+${weeksLeft !== null && weeksLeft > 3 && weeksLeft <= 8 ? '- Phase de préparation spécifique, travailler l\'allure cible' : ''}
 
 RETOURNE UNIQUEMENT CE JSON (pas de texte, pas de markdown, pas de \`\`\`) avec EXACTEMENT 2 semaines.
 Le champ "detail" doit OBLIGATOIREMENT utiliser le séparateur · entre les 3 phases (échauffement · travail · retour au calme). Aucun "puis" ni virgule entre les phases.
