@@ -1357,26 +1357,42 @@ const UI = {
       // 1. Supprime les blocs code markdown (```...```) autour du JSON
       text = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, function(_, inner) { return inner.trim(); });
 
-      // 2. Extrait le JSON plan et le remplace par un rendu visuel
+      // 2. Extrait tous les blocs JSON ({..} ou [..]) — rendu plan si {"weeks":}, sinon supprimé
       var planHtml = '';
-      var jsonStart = text.indexOf('{"weeks"');
-      if (jsonStart !== -1) {
-        // Trouve la fermeture du JSON en comptant les accolades
-        var depth = 0, jsonEnd = -1;
-        for (var i = jsonStart; i < text.length; i++) {
-          if (text[i] === '{') depth++;
-          else if (text[i] === '}') { depth--; if (depth === 0) { jsonEnd = i; break; } }
+      var self2    = this;
+
+      function findJsonEnd(txt, start, openC, closeC) {
+        var d = 0;
+        for (var k = start; k < txt.length; k++) {
+          if (txt[k] === openC) d++;
+          else if (txt[k] === closeC) { d--; if (d === 0) return k; }
         }
-        if (jsonEnd !== -1) {
-          try {
-            var plan = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-            if (plan.weeks && Array.isArray(plan.weeks)) {
-              planHtml = this._renderInlinePlan(plan);
-              text = (text.slice(0, jsonStart) + text.slice(jsonEnd + 1)).trim();
-            }
-          } catch(e) { /* JSON mal formé, on laisse le texte tel quel */ }
-        }
+        return -1;
       }
+
+      var cleaned2 = '', pos2 = 0;
+      while (pos2 < text.length) {
+        var bi = text.indexOf('{', pos2);
+        var ai = text.indexOf('[', pos2);
+        var si = -1, oc = '', cc = '';
+        if (bi !== -1 && (ai === -1 || bi < ai)) { si = bi; oc = '{'; cc = '}'; }
+        else if (ai !== -1)                       { si = ai; oc = '['; cc = ']'; }
+        if (si === -1) { cleaned2 += text.slice(pos2); break; }
+        cleaned2 += text.slice(pos2, si);
+        var ei = findJsonEnd(text, si, oc, cc);
+        if (ei === -1) { cleaned2 += text.slice(si); break; }
+        try {
+          var parsed = JSON.parse(text.slice(si, ei + 1));
+          if (parsed && parsed.weeks && Array.isArray(parsed.weeks)) {
+            planHtml = self2._renderInlinePlan(parsed);
+          }
+          // Autre JSON valide → supprimé silencieusement
+        } catch(e) {
+          cleaned2 += text.slice(si, ei + 1); // Pas du JSON → conservé
+        }
+        pos2 = ei + 1;
+      }
+      text = cleaned2.trim();
 
       // 3. Traitement ligne par ligne
       var self    = this;
