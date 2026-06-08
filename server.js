@@ -71,6 +71,7 @@ async function dbGet(stravaId) {
 }
 
 // ─── Middlewares ──────────────────────────────────────────────────────────────
+app.use((req, res, next) => { res.setHeader('X-App-Version', '1.1.3'); next(); });
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
