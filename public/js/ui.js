@@ -1353,106 +1353,140 @@ const UI = {
   },
 
   formatCoachMessage(text) {
-    // 1. Extrait le JSON plan s'il est présent et le remplace par un rendu visuel
-    let planHtml = '';
-    const jsonStart = text.indexOf('{"weeks"');
-    if (jsonStart !== -1) {
-      const jsonEnd = text.lastIndexOf('}');
-      if (jsonEnd > jsonStart) {
-        try {
-          const jsonStr = text.slice(jsonStart, jsonEnd + 1);
-          const plan    = JSON.parse(jsonStr);
-          if (plan.weeks && Array.isArray(plan.weeks)) {
-            planHtml = this._renderInlinePlan(plan);
-            text = text.slice(0, jsonStart).trimEnd() + text.slice(jsonEnd + 1).trimStart();
-          }
-        } catch(e) {}
+    try {
+      // 1. Supprime les blocs code markdown (```...```) autour du JSON
+      text = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, function(_, inner) { return inner.trim(); });
+
+      // 2. Extrait le JSON plan et le remplace par un rendu visuel
+      var planHtml = '';
+      var jsonStart = text.indexOf('{"weeks"');
+      if (jsonStart !== -1) {
+        // Trouve la fermeture du JSON en comptant les accolades
+        var depth = 0, jsonEnd = -1;
+        for (var i = jsonStart; i < text.length; i++) {
+          if (text[i] === '{') depth++;
+          else if (text[i] === '}') { depth--; if (depth === 0) { jsonEnd = i; break; } }
+        }
+        if (jsonEnd !== -1) {
+          try {
+            var plan = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+            if (plan.weeks && Array.isArray(plan.weeks)) {
+              planHtml = this._renderInlinePlan(plan);
+              text = (text.slice(0, jsonStart) + text.slice(jsonEnd + 1)).trim();
+            }
+          } catch(e) { /* JSON mal formé, on laisse le texte tel quel */ }
+        }
       }
-    }
 
-    // 2. Traitement ligne par ligne
-    const lines  = text.split('\n');
-    const parts  = [];
-    let listBuf  = [];   // buffer pour les listes en cours
-    let numBuf   = [];
+      // 3. Traitement ligne par ligne
+      var self    = this;
+      var lines   = text.split('\n');
+      var parts   = [];
+      var listBuf = [];
+      var numBuf  = [];
 
-    const flushList = () => {
-      if (listBuf.length) { parts.push('<ul class="coach-list">' + listBuf.join('') + '</ul>'); listBuf = []; }
-      if (numBuf.length)  { parts.push('<ol class="coach-list">'  + numBuf.join('')  + '</ol>'); numBuf = []; }
-    };
+      function flushList() {
+        if (listBuf.length) { parts.push('<ul class="coach-list">' + listBuf.join('') + '</ul>'); listBuf = []; }
+        if (numBuf.length)  { parts.push('<ol class="coach-list">'  + numBuf.join('')  + '</ol>'); numBuf = []; }
+      }
 
-    lines.forEach(raw => {
-      const line = raw.trim();
-      if (!line) { flushList(); parts.push('<div class="coach-spacer"></div>'); return; }
+      // Détecte si une ligne commence par un emoji (code point > 0x2000)
+      function startsWithEmoji(s) {
+        if (!s) return false;
+        var code = s.codePointAt(0);
+        return code > 0x2000;
+      }
 
-      // Titre de section (ligne qui commence par emoji ou par **)
-      if (/^(#{1,3}\s|(\*\*[^*]+\*\*\s*:?\s*$))/.test(line) ||
-          /^[\u{1F300}-\u{1FFFF}]|^[📊✅⚠️🎯💪🫀🦵🧠🌡️📅⚡🔴🟢🔵]/u.test(line)) {
+      lines.forEach(function(raw) {
+        var line = raw.trim();
+        if (!line) { flushList(); parts.push('<div class="coach-spacer"></div>'); return; }
+
+        // Titre de section : commence par emoji OU ##/### OU ligne **Texte** seul
+        var isHeading = startsWithEmoji(line)
+          || /^#{1,3}\s/.test(line)
+          || /^\*\*[^*]+\*\*\s*:?\s*$/.test(line);
+
+        if (isHeading) {
+          flushList();
+          var cleaned = line.replace(/^#{1,3}\s/, '').replace(/\*\*/g, '');
+          parts.push('<div class="coach-section-title">' + self.escapeHtml(cleaned) + '</div>');
+          return;
+        }
+
+        // Liste à puces (- ou •)
+        var bulletMatch = line.match(/^[-•]\s+(.+)/);
+        if (bulletMatch) {
+          if (numBuf.length) flushList();
+          listBuf.push('<li>' + self._formatInline(bulletMatch[1]) + '</li>');
+          return;
+        }
+
+        // Liste numérotée (1. 2. etc.)
+        var numMatch = line.match(/^(\d+)[.)]\s+(.+)/);
+        if (numMatch) {
+          if (listBuf.length) flushList();
+          numBuf.push('<li>' + self._formatInline(numMatch[2]) + '</li>');
+          return;
+        }
+
+        // Ligne normale
         flushList();
-        const cleaned = line.replace(/^#{1,3}\s/, '').replace(/\*\*/g, '');
-        parts.push('<div class="coach-section-title">' + this.escapeHtml(cleaned) + '</div>');
-        return;
-      }
+        parts.push('<p class="coach-p">' + self._formatInline(line) + '</p>');
+      });
 
-      // Liste à puces (- ou •)
-      const bulletMatch = line.match(/^[-•]\s+(.+)/);
-      if (bulletMatch) {
-        numBuf.length && flushList();
-        listBuf.push('<li>' + this._formatInline(bulletMatch[1]) + '</li>');
-        return;
-      }
-
-      // Liste numérotée (1. 2. etc.)
-      const numMatch = line.match(/^(\d+)\.\s+(.+)/);
-      if (numMatch) {
-        listBuf.length && flushList();
-        numBuf.push('<li>' + this._formatInline(numMatch[2]) + '</li>');
-        return;
-      }
-
-      // Ligne normale
       flushList();
-      parts.push('<p class="coach-p">' + this._formatInline(line) + '</p>');
-    });
+      if (planHtml) parts.push(planHtml);
 
-    flushList();
+      return parts.join('') || this.escapeHtml(text).replace(/\n/g, '<br>');
 
-    // 3. Ajoute le plan rendu si présent
-    if (planHtml) parts.push(planHtml);
-
-    return parts.join('');
+    } catch(e) {
+      // Fallback si erreur inattendue
+      return this.escapeHtml(text).replace(/\n/g, '<br>');
+    }
   },
 
-  // Formatte le texte inline : **gras**, allures en orange
+  // Formatte le texte inline : **gras**, allures en orange, FC en rouge
   _formatInline(text) {
-    return this.escapeHtml(text)
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/`([^`]+)`/g, '<code class="coach-code">$1</code>')
-      // Allures (ex: 5:30/km) en couleur orange
-      .replace(/(\d:\d{2}(?:-\d:\d{2})?\/km)/g, '<span class="coach-pace">$1</span>')
-      // FC (ex: FC&lt;75% ou 145bpm)
-      .replace(/(FC[<>]?\d+%?|\d{2,3}\s*bpm)/g, '<span class="coach-hr">$1</span>');
+    var s = this.escapeHtml(text);
+    // **gras**
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // `code`
+    s = s.replace(/`([^`]+)`/g, '<code class="coach-code">$1</code>');
+    // Allures ex: 5:30/km ou 5:10-5:30/km
+    s = s.replace(/(\d:\d{2}(?:-\d:\d{2})?\/km)/g, '<span class="coach-pace">$1</span>');
+    // FC : "FC 145bpm", "145 bpm", "145bpm" — après escapeHtml, < devient &lt;
+    s = s.replace(/(FC\s*(?:&lt;|&gt;|<|>)?\s*\d+\s*%?(?:\s*bpm)?|\d{2,3}\s*bpm)/gi, '<span class="coach-hr">$1</span>');
+    return s;
   },
 
   // Rendu compact d'un plan JSON dans le chat
   _renderInlinePlan(plan) {
-    const typeClass = {ef:'pill-ef',work:'pill-vma',vma:'pill-vma',sl:'pill-sl',tempo:'pill-tempo',recup:'pill-rest',free:'pill-ef'};
-    let html = '<div class="coach-plan-block">';
+    var typeClass = {ef:'pill-ef',work:'pill-vma',vma:'pill-vma',sl:'pill-sl',tempo:'pill-tempo',recup:'pill-rest',free:'pill-ef'};
+    var self = this;
+    var html = '<div class="coach-plan-block">';
     plan.weeks.forEach(function(week, wi) {
       html += '<div class="coach-plan-week">'
-        + '<div class="coach-plan-week-title">' + (week.title || 'Semaine ' + (wi+1))
-        + '<span class="volume-badge">' + (week.volume_km || '?') + ' km</span></div>';
+        + '<div class="coach-plan-week-title">'
+        + self.escapeHtml(week.title || ('Semaine ' + (wi + 1)))
+        + ' <span class="volume-badge">' + (week.volume_km || '?') + ' km</span></div>';
       var order = {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6};
-      var days  = (week.days || []).slice().sort(function(a,b){ return (order[a.day]||7)-(order[b.day]||7); });
+      var days  = (week.days || []).slice().sort(function(a, b) {
+        return (order[a.day] !== undefined ? order[a.day] : 7) - (order[b.day] !== undefined ? order[b.day] : 7);
+      });
       days.forEach(function(d) {
-        var tc = typeClass[d.type] || 'pill-ef';
-        var detail = d.detail ? d.detail.split('·')[0].trim() : '';  // Juste la 1ère phase pour la compacité
-        if (d.type === 'ef' || d.type === 'sl' || d.type === 'recup' || d.type === 'free') detail = d.detail || '';
+        var resolvedType = self._resolveType(d);
+        var tc     = typeClass[resolvedType] || 'pill-ef';
+        // Pour EF/SL/récup : affiche tout le détail. Pour les intenses : juste la phase travail
+        var detail = '';
+        if (d.detail) {
+          var phases = d.detail.split('·');
+          detail = (phases.length > 1) ? phases[1].trim() : d.detail;
+        }
         html += '<div class="coach-plan-day">'
-          + '<span class="coach-plan-dayname">' + d.day + '</span>'
+          + '<span class="coach-plan-dayname">' + self.escapeHtml(d.day) + '</span>'
           + '<div style="flex:1;">'
-          + '<span class="session-pill ' + tc + '" style="font-size:11px;padding:2px 8px;">' + d.label + '</span>'
-          + (detail ? '<div class="coach-plan-detail">' + detail + '</div>' : '')
+          + '<span class="session-pill ' + tc + '" style="font-size:11px;padding:2px 8px;">' + self.escapeHtml(d.label) + '</span>'
+          + (detail ? '<div class="coach-plan-detail">' + self.escapeHtml(detail) + '</div>' : '')
           + '</div></div>';
       });
       html += '</div>';
