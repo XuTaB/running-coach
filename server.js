@@ -311,7 +311,48 @@ const GEMINI_MODELS = [
   'gemini-2.0-flash-lite'
 ];
 
-async function callGemini(prompt, retries = 3) {
+// Construit le tableau contents pour Gemini en format multi-tour
+// Fenêtre glissante : résumé des anciens + 6 derniers échanges
+function buildContents(systemText, messages, summary) {
+  const contents = [];
+
+  // 1. Contexte système en premier tour (profil + plan + activités)
+  if (systemText) {
+    const truncated = systemText.length > 30000 ? systemText.slice(0, 30000) : systemText;
+    contents.push({ role: 'user',  parts: [{ text: truncated }] });
+    contents.push({ role: 'model', parts: [{ text: 'Contexte reçu, je suis prêt à coacher.' }] });
+  }
+
+  // 2. Résumé des échanges anciens (si présent)
+  if (summary) {
+    contents.push({ role: 'user',  parts: [{ text: 'Résumé de notre échange précédent : ' + summary }] });
+    contents.push({ role: 'model', parts: [{ text: 'Bien noté, je tiens compte de ce contexte.' }] });
+  }
+
+  // 3. Les 12 derniers messages (6 échanges) — fenêtre glissante
+  const recent = messages.slice(-12);
+  for (const msg of recent) {
+    const role = msg.role === 'assistant' ? 'model' : 'user';
+    const text = (msg.content || '').trim();
+    if (!text) continue;
+    // Évite deux rôles identiques consécutifs (contrainte Gemini)
+    const last = contents[contents.length - 1];
+    if (last && last.role === role) {
+      last.parts[0].text += '\n' + text;
+    } else {
+      contents.push({ role, parts: [{ text }] });
+    }
+  }
+
+  // Gemini exige que le dernier tour soit 'user'
+  if (contents[contents.length - 1]?.role !== 'user') {
+    contents.push({ role: 'user', parts: [{ text: 'Continue.' }] });
+  }
+
+  return contents;
+}
+
+async function callGemini(contents, retries = 3) {
   let lastError = null;
 
   for (const model of GEMINI_MODELS) {
@@ -323,7 +364,7 @@ async function callGemini(prompt, retries = 3) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              contents,
               generationConfig: {
                 maxOutputTokens: 8192,
                 temperature: 0.7,
@@ -336,24 +377,23 @@ async function callGemini(prompt, retries = 3) {
 
         const data = await geminiRes.json();
 
-        // Surcharge ou quota → retry sur le même modèle ou passe au suivant
         if (!geminiRes.ok || data.error) {
           const msg = data?.error?.message || '';
           const isOverload = msg.includes('high demand') || msg.includes('overloaded') || msg.includes('RESOURCE_EXHAUSTED') || geminiRes.status === 429 || geminiRes.status === 503;
           console.warn(`[COACH] ${model} tentative ${attempt}/${retries}: ${msg}`);
           lastError = msg;
           if (isOverload && attempt < retries) {
-            await new Promise(r => setTimeout(r, attempt * 1000)); // 1s, 2s, 3s
+            await new Promise(r => setTimeout(r, attempt * 1000));
             continue;
           }
-          break; // erreur non-récupérable → essaie le modèle suivant
+          break;
         }
 
         const parts = data.candidates?.[0]?.content?.parts || [];
         const text  = (parts.find(p => p.text && !p.thought) || parts[0])?.text;
         if (!text) { lastError = 'Réponse vide'; break; }
 
-        console.log(`[COACH] ✅ Réponse via ${model} (tentative ${attempt})`);
+        console.log(`[COACH] ✅ ${model} (tentative ${attempt}, ${contents.length} turns)`);
         return text;
 
       } catch (e) {
@@ -366,19 +406,37 @@ async function callGemini(prompt, retries = 3) {
   throw new Error(lastError || 'Tous les modèles Gemini ont échoué');
 }
 
+// Résume les anciens échanges pour alléger le contexte
+async function summarizeHistory(oldMessages) {
+  try {
+    const digest = oldMessages.map(m =>
+      (m.role === 'user' ? 'Athlète: ' : 'Coach: ') + (m.content || '').slice(0, 300)
+    ).join('\n');
+    const prompt = `Résume en 3-5 points clés (max 200 mots) cet échange entre un coach running et son athlète. Retiens uniquement les informations importantes : douleurs, fatigue, objectifs mentionnés, décisions prises, conseils donnés.\n\n${digest}`;
+    const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+    return await callGemini(contents, 1); // 1 seul essai pour le résumé
+  } catch (e) {
+    console.warn('[COACH] Résumé échoué, ignoré:', e.message);
+    return null;
+  }
+}
+
 app.post('/api/coach/chat', async (req, res) => {
-  const { system, messages } = req.body;
+  const { system, messages, summary: clientSummary } = req.body;
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'Clé Gemini manquante' });
   if (!messages?.length) return res.status(400).json({ error: 'messages[] requis' });
 
   try {
-    const systemText = system || '';
-    const userText   = messages[messages.length - 1]?.content || '';
-    const fullPrompt = systemText ? `${systemText}\n\n---\n\n${userText}` : userText;
-    const truncated  = fullPrompt.length > 40000 ? fullPrompt.slice(0, 40000) : fullPrompt;
+    // Si l'historique est long (> 16 messages), on résume les anciens avant la fenêtre glissante
+    let summary = clientSummary || null;
+    if (!summary && messages.length > 16) {
+      const toSummarize = messages.slice(0, -12); // tout sauf les 12 derniers
+      summary = await summarizeHistory(toSummarize);
+    }
 
-    const text = await callGemini(truncated);
-    res.json({ content: [{ type: 'text', text }] });
+    const contents = buildContents(system || '', messages, summary);
+    const text = await callGemini(contents);
+    res.json({ content: [{ type: 'text', text }], summary });
   } catch (err) {
     console.error('[COACH] Erreur finale:', err.message);
     res.status(502).json({ error: 'Erreur Gemini', details: err.message });

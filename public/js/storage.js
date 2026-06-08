@@ -43,7 +43,9 @@ const Storage = {
   },
 
   // ── Chat ────────────────────────────────────────────────────────────────────
-  getChatHistory() { return this.get().chatHistory || []; },
+  getChatHistory()         { return this.get().chatHistory || []; },
+  getChatSummary()         { return this.get().chatSummary || null; },
+  saveChatSummary(summary) { this.update({ chatSummary: summary }); },
   saveChatHistory(msgs) {
     this.update({ chatHistory: msgs });
     this._syncChat(msgs);

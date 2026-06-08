@@ -72,10 +72,15 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
     const contextStr = this.buildContext(profile);
     const history    = Storage.getChatHistory();
 
+    // Fenêtre glissante : on envoie les 12 derniers messages + le nouveau
+    // Le serveur résume automatiquement si l'historique est plus long
     const messages = [
-      ...history.slice(-20).map(m => ({ role: m.role, content: m.content })),
+      ...history.slice(-12).map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage }
     ];
+
+    // Résumé des échanges anciens stocké localement (évite de le recalculer)
+    const summary = history.length > 16 ? (Storage.getChatSummary() || null) : null;
 
     try {
       const ctrl = new AbortController();
@@ -86,13 +91,16 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           system: (systemOverride || this.SYSTEM_PROMPT) + '\n\n' + contextStr,
-          messages
+          messages,
+          summary
         })
       });
       clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data  = await res.json();
       const reply = data.content?.[0]?.text || 'Erreur de réponse.';
+      // Sauvegarde le résumé généré par le serveur pour les prochains appels
+      if (data.summary) Storage.saveChatSummary(data.summary);
 
       // Détecte si la réponse contient un plan JSON et le sauvegarde automatiquement
       this.tryExtractAndSavePlan(reply);
