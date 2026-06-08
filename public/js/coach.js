@@ -44,7 +44,7 @@ RÈGLES DE FORME :
 RÈGLES TECHNIQUES POUR LE PLAN D'ENTRAÎNEMENT
 ═══════════════════════════════════════════
 
-Quand tu proposes ou modifies un plan, TOUJOURS inclure le JSON complet à la fin de la réponse.
+Quand tu mentionnes, décris, proposes ou modifies un plan, TOUJOURS inclure le JSON complet à la fin de la réponse.
 Format strict — sans markdown, sans backticks, juste le JSON brut.
 Générer TOUJOURS exactement 2 semaines.
 Types valides : ef | work | tempo | sl | recup
@@ -347,15 +347,29 @@ Structure ta réponse en 3 points concis :
       });
     }
 
-    // Plan en cours (les 2 semaines)
+    // Plan en cours (les 2 semaines) — jours triés Lun→Dim, titres calculés sur la date réelle
     const plan = Storage.getPlan();
     if (plan && plan.weeks && plan.weeks.length > 0) {
+      const dayOrder = {Lun:0,Mar:1,Mer:2,Jeu:3,Ven:4,Sam:5,Dim:6};
+      // Calcule le lundi de la semaine en cours
+      const todayDow  = now.getDay(); // 0=dim
+      const mondayOff = todayDow === 0 ? -6 : 1 - todayDow;
+      const monday0   = new Date(now); monday0.setDate(now.getDate() + mondayOff);
+      const fmt = function(d) { return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0'); };
       lines.push('');
-      lines.push('PLAN EN COURS :');
+      lines.push('PLAN EN COURS (date du jour : ' + fmt(now) + ') :');
       plan.weeks.forEach(function(w, wi) {
-        lines.push((wi === 0 ? 'Semaine courante' : 'Semaine ' + (wi + 1)) + ' (' + (w.title||'') + ', ' + (w.volume_km||'?') + ' km) :');
-        (w.days || []).forEach(function(d) {
-          lines.push('  ' + d.day + ': ' + d.label + (d.detail ? ' — ' + d.detail.substring(0, 80) + (d.detail.length > 80 ? '…' : '') : ''));
+        const weekStart = new Date(monday0); weekStart.setDate(monday0.getDate() + wi * 7);
+        const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+        const weekLabel = (wi === 0 ? 'Semaine courante' : 'Semaine prochaine')
+          + ' (' + fmt(weekStart) + '→' + fmt(weekEnd) + ', ' + (w.volume_km||'?') + ' km) :';
+        lines.push(weekLabel);
+        const sorted = (w.days || []).slice().sort(function(a, b) {
+          return (dayOrder[a.day] !== undefined ? dayOrder[a.day] : 7)
+               - (dayOrder[b.day] !== undefined ? dayOrder[b.day] : 7);
+        });
+        sorted.forEach(function(d) {
+          lines.push('  ' + d.day + ': ' + d.label + (d.detail ? ' — ' + d.detail.substring(0, 100) + (d.detail.length > 100 ? '…' : '') : ''));
         });
       });
     }
