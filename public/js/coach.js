@@ -78,14 +78,18 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
     ];
 
     try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(function() { ctrl.abort(); }, 55000); // 55s max
       const res = await fetch('/api/coach/chat', {
         method: 'POST',
+        signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           system: (systemOverride || this.SYSTEM_PROMPT) + '\n\n' + contextStr,
           messages
         })
       });
+      clearTimeout(timer);
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data  = await res.json();
       const reply = data.content?.[0]?.text || 'Erreur de réponse.';

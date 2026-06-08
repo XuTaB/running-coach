@@ -304,6 +304,67 @@ app.get('/api/test-db', async (req, res) => {
 });
 
 // ─── Coach IA — Gemini ────────────────────────────────────────────────────────
+// Modèles par ordre de priorité : 2.5-flash en premier, 1.5-flash en fallback
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-1.5-flash'
+];
+
+async function callGemini(prompt, retries = 3) {
+  let lastError = null;
+
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: prompt }] }],
+              generationConfig: {
+                maxOutputTokens: 8192,
+                temperature: 0.7,
+                topP: 0.9,
+                ...(model === 'gemini-2.5-flash' ? { thinkingConfig: { thinkingBudget: 0 } } : {})
+              }
+            })
+          }
+        );
+
+        const data = await geminiRes.json();
+
+        // Surcharge ou quota → retry sur le même modèle ou passe au suivant
+        if (!geminiRes.ok || data.error) {
+          const msg = data?.error?.message || '';
+          const isOverload = msg.includes('high demand') || msg.includes('overloaded') || msg.includes('RESOURCE_EXHAUSTED') || geminiRes.status === 429 || geminiRes.status === 503;
+          console.warn(`[COACH] ${model} tentative ${attempt}/${retries}: ${msg}`);
+          lastError = msg;
+          if (isOverload && attempt < retries) {
+            await new Promise(r => setTimeout(r, attempt * 1000)); // 1s, 2s, 3s
+            continue;
+          }
+          break; // erreur non-récupérable → essaie le modèle suivant
+        }
+
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        const text  = (parts.find(p => p.text && !p.thought) || parts[0])?.text;
+        if (!text) { lastError = 'Réponse vide'; break; }
+
+        console.log(`[COACH] ✅ Réponse via ${model} (tentative ${attempt})`);
+        return text;
+
+      } catch (e) {
+        lastError = e.message;
+        if (attempt < retries) await new Promise(r => setTimeout(r, attempt * 1000));
+      }
+    }
+  }
+
+  throw new Error(lastError || 'Tous les modèles Gemini ont échoué');
+}
+
 app.post('/api/coach/chat', async (req, res) => {
   const { system, messages } = req.body;
   if (!process.env.GEMINI_API_KEY) return res.status(503).json({ error: 'Clé Gemini manquante' });
@@ -313,39 +374,13 @@ app.post('/api/coach/chat', async (req, res) => {
     const systemText = system || '';
     const userText   = messages[messages.length - 1]?.content || '';
     const fullPrompt = systemText ? `${systemText}\n\n---\n\n${userText}` : userText;
-    const truncated  = fullPrompt.length > 30000 ? fullPrompt.slice(0, 30000) : fullPrompt;
+    const truncated  = fullPrompt.length > 40000 ? fullPrompt.slice(0, 40000) : fullPrompt;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: truncated }] }],
-          generationConfig: {
-            maxOutputTokens: 8192,
-            temperature: 0.7,
-            topP: 0.9,
-            thinkingConfig: { thinkingBudget: 0 }  // désactive le thinking — inutile ici et évite les parts[0] vides
-          }
-        })
-      }
-    );
-    const geminiData = await geminiRes.json();
-    if (!geminiRes.ok || geminiData.error) {
-      console.error('[COACH] Erreur Gemini:', geminiData?.error?.message);
-      return res.status(502).json({ error: 'Erreur Gemini', details: geminiData?.error?.message });
-    }
-    // Gemini 2.5 Flash peut renvoyer plusieurs parts (thinking + réponse) — on cherche la vraie réponse texte
-    const parts = geminiData.candidates?.[0]?.content?.parts || [];
-    const text = (parts.find(p => p.text && !p.thought) || parts[0])?.text;
-    if (!text) {
-      console.error('[COACH] Réponse vide. Parts reçus:', JSON.stringify(parts).slice(0, 200));
-      return res.status(502).json({ error: 'Réponse vide Gemini' });
-    }
+    const text = await callGemini(truncated);
     res.json({ content: [{ type: 'text', text }] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[COACH] Erreur finale:', err.message);
+    res.status(502).json({ error: 'Erreur Gemini', details: err.message });
   }
 });
 
