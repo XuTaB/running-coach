@@ -1,4 +1,4 @@
-// server.js — Coach Running v1.1.2
+// server.js — Coach Running v1.1.3
 // Auth : Strava OAuth · IA : Gemini · DB : Supabase (connexion directe PostgreSQL)
 require('dotenv').config();
 const express  = require('express');
@@ -352,7 +352,7 @@ app.post('/api/coach/chat', async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     status:    'ok',
-    version:   '1.1.2',
+    version:   '1.1.3',
     strava:    !!process.env.STRAVA_CLIENT_ID,
     gemini:    !!process.env.GEMINI_API_KEY,
     database:  !!db,
@@ -369,5 +369,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🏃 Coach Running v1.1.2 — port ${PORT}`);
+  console.log(`🏃 Coach Running v1.1.3 — port ${PORT}`);
 });
