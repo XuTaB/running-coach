@@ -435,6 +435,12 @@ app.post('/api/coach/chat', async (req, res) => {
     }
 
     const contents = buildContents(system || '', messages, summary);
+    // Debug : résumé du prompt envoyé à Gemini (visible dans Railway Deploy Logs)
+    const totalChars = contents.reduce((n, c) => n + (c.parts[0]?.text?.length || 0), 0);
+    console.log(`[COACH] Envoi → ${contents.length} turns, ~${totalChars} chars, ${messages.length} messages historique`);
+    if (process.env.DEBUG_PROMPT === 'true') {
+      contents.forEach((c, i) => console.log(`  [${i}] ${c.role}: ${(c.parts[0]?.text || '').slice(0, 120)}…`));
+    }
     const text = await callGemini(contents);
     res.json({ content: [{ type: 'text', text }], summary });
   } catch (err) {
