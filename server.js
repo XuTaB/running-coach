@@ -307,7 +307,8 @@ app.get('/api/test-db', async (req, res) => {
 // Modèles par ordre de priorité : 2.5-flash en premier, 1.5-flash en fallback
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
-  'gemini-1.5-flash-latest'
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite'
 ];
 
 async function callGemini(prompt, retries = 3) {
