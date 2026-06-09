@@ -125,17 +125,23 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
 
       if (!plan.weeks || !Array.isArray(plan.weeks) || plan.weeks.length === 0) return;
 
-      // Valide la structure minimale
+      // Filtre les repos D'ABORD, puis valide qu'il reste des séances
+      plan.weeks = plan.weeks.map(w => ({
+        ...w,
+        days: (w.days || []).filter(d => d.type !== 'rest' && d.type !== 'recup' && d.type !== 'repos')
+      }));
+
+      // Valide la structure APRÈS filtrage — au moins une séance par semaine
       const hasValidDays = plan.weeks.every(w =>
         Array.isArray(w.days) && w.days.length > 0 &&
         w.days.every(d => d.day && d.type && d.label)
       );
       if (!hasValidDays) return;
 
-      // Filtre les repos et sauvegarde
+      // (filtre déjà appliqué ci-dessus)
       plan.weeks = plan.weeks.map(w => ({
         ...w,
-        days: w.days.filter(d => d.type !== 'rest' && d.type !== 'recup')
+        days: w.days // déjà filtré
       }));
 
       Storage.savePlan(plan);
