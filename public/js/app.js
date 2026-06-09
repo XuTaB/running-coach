@@ -582,9 +582,11 @@ const App = {
         return true;
       };
       const guessType = (d) => {
-        if (scheduleMap[d.day]) return scheduleMap[d.day];
+        const scheduledType = scheduleMap[d.day];
+        // 'free' = au choix du coach → on détecte depuis le label plutôt que de forcer
+        if (scheduledType && scheduledType !== 'free') return scheduledType;
         const lbl = (d.label || '').toLowerCase();
-        if (/sortie.{0,10}long|long.{0,10}run/.test(lbl)) return 'sl';
+        if (/sortie.{0,10}long|long.{0,10}run|longue/.test(lbl)) return 'sl';
         if (/fraction|vma|interval|speed|rapide/.test(lbl)) return 'work';
         if (/seuil|tempo|threshold|allure.{0,8}marathon/.test(lbl)) return 'tempo';
         if (/r[ée]cup|recovery|repos/.test(lbl)) return 'recup';
@@ -596,8 +598,9 @@ const App = {
         days: (week.days || []).map(d => {
           const correctedType = guessType(d);
           const rawLabel = d.label || defaultLabels[correctedType] || 'Séance';
-          // Si le type a été corrigé par le schedule ET le label ne correspond pas → label par défaut
-          const label = (!labelMatchesType(rawLabel, correctedType) && scheduleMap[d.day])
+          // Si le type a été forcé par le schedule (pas 'free') ET le label ne correspond pas → label par défaut
+          const scheduledFixed = scheduleMap[d.day] && scheduleMap[d.day] !== 'free';
+          const label = (scheduledFixed && !labelMatchesType(rawLabel, correctedType))
             ? (defaultLabels[correctedType] || rawLabel)
             : rawLabel;
           return { day: d.day || '', type: correctedType, label, detail: d.detail || '' };
