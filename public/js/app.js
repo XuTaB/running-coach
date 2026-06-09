@@ -571,6 +571,16 @@ const App = {
       // 1) Schedule profil prioritaire sur le type IA
       // 2) Si le jour n'est pas dans le schedule (IA a changé de jour), détection par label
       const scheduleMap = Storage.getProfile()?.schedule || {};
+      // Labels par défaut si Gemini donne un libellé incohérent avec le type imposé
+      const defaultLabels = { ef: 'Endurance fondamentale', sl: 'Sortie longue', work: 'Fractionné', tempo: 'Séance seuil', recup: 'Récupération active' };
+      const labelMatchesType = (lbl, type) => {
+        const l = lbl.toLowerCase();
+        if (type === 'sl')    return /sortie.{0,12}long|longue|long run/.test(l);
+        if (type === 'work')  return /fraction|vma|interval|speed|rapide/.test(l);
+        if (type === 'tempo') return /seuil|tempo|threshold/.test(l);
+        if (type === 'ef')    return /endurance|fonda|ef\b|footing/.test(l);
+        return true;
+      };
       const guessType = (d) => {
         if (scheduleMap[d.day]) return scheduleMap[d.day];
         const lbl = (d.label || '').toLowerCase();
@@ -583,12 +593,15 @@ const App = {
       plan.weeks = plan.weeks.map(week => ({
         title:     week.title     || 'Semaine',
         volume_km: week.volume_km || 0,
-        days: (week.days || []).map(d => ({
-          day:    d.day    || '',
-          type:   guessType(d),
-          label:  d.label  || 'Repos',
-          detail: d.detail || ''
-        }))
+        days: (week.days || []).map(d => {
+          const correctedType = guessType(d);
+          const rawLabel = d.label || defaultLabels[correctedType] || 'Séance';
+          // Si le type a été corrigé par le schedule ET le label ne correspond pas → label par défaut
+          const label = (!labelMatchesType(rawLabel, correctedType) && scheduleMap[d.day])
+            ? (defaultLabels[correctedType] || rawLabel)
+            : rawLabel;
+          return { day: d.day || '', type: correctedType, label, detail: d.detail || '' };
+        })
       }));
 
       Storage.savePlan(plan);
