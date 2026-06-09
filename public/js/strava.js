@@ -114,7 +114,7 @@ const Strava = {
     if (!token) return null;
 
     // Cache local — évite de rappeler l'API à chaque ouverture
-    const cacheKey = 'strava_detail_v3_' + id;   // v3 : inclut latlng stream
+    const cacheKey = 'strava_detail_v4_' + id;   // v4 : inclut laps pour fractionné
     const cached   = localStorage.getItem(cacheKey);
     if (cached) {
       try { return JSON.parse(cached); } catch(e) {}
@@ -207,14 +207,30 @@ const Strava = {
     if (!detail) return null;
 
     const splits = detail.splits_metric || [];
-    const zones  = detail.zones || [];
+    const laps   = detail.laps          || [];
+    const zones  = detail.zones         || [];
     const hrZone = zones.find(z => z.type === 'heartrate');
 
     // Splits km par km
     const splitsStr = splits.length > 0
       ? splits.map((s, i) =>
-          `  Km ${i+1} : ${this.formatPace(s.average_speed)}/km · ${s.average_heartrate ? Math.round(s.average_heartrate) + ' bpm' : ''} · dénivelé ${s.elevation_difference > 0 ? '+' : ''}${Math.round(s.elevation_difference||0)}m`
+          `  Km ${i+1} : ${this.formatPace(s.average_speed)}/km` +
+          (s.average_heartrate ? ` · FC ${Math.round(s.average_heartrate)} bpm` : '') +
+          ` · D${s.elevation_difference >= 0 ? '+' : ''}${Math.round(s.elevation_difference||0)}m`
         ).join('\n')
+      : null;
+
+    // Laps (tours marqués manuellement — essentiels pour les fractionné/intervalles)
+    // On les affiche si : plusieurs laps, ou laps courts (<900m = probablement des intervalles)
+    const hasIntervalLaps = laps.length > 1 && laps.some(l => (l.distance || 0) < 900);
+    const lapsStr = laps.length > 0
+      ? laps.map((l, i) => {
+          const dist = Math.round(l.distance || 0);
+          const pace = this.formatPace(l.average_speed);
+          const fc   = l.average_heartrate ? ` · FC ${Math.round(l.average_heartrate)} bpm` : '';
+          const time = l.moving_time ? ` · ${Math.floor(l.moving_time/60)}'${String(l.moving_time%60).padStart(2,'0')}"` : '';
+          return `  Lap ${i+1} : ${dist}m à ${pace}/km${time}${fc}`;
+        }).join('\n')
       : null;
 
     // Zones FC
@@ -225,7 +241,6 @@ const Strava = {
       : null;
 
     return {
-      // Données principales
       name:            detail.name,
       date:            this.formatDate(detail.start_date_local),
       distance_km:     this.formatDistance(detail.distance),
@@ -235,25 +250,20 @@ const Strava = {
       pace_max:        this.formatPace(detail.max_speed),
       hr_avg:          detail.average_heartrate ? Math.round(detail.average_heartrate) : null,
       hr_max:          detail.max_heartrate     ? Math.round(detail.max_heartrate)     : null,
-      cadence_avg:     detail.average_cadence   ? Math.round(detail.average_cadence * 2) : null, // *2 = foulées/min
+      cadence_avg:     detail.average_cadence   ? Math.round(detail.average_cadence * 2) : null,
       elevation_gain:  Math.round(detail.total_elevation_gain || 0),
-      elevation_loss:  Math.round(detail.elev_low  || 0),
       calories:        detail.calories           ? Math.round(detail.calories)         : null,
       suffer_score:    detail.suffer_score       || null,
       perceived_exertion: detail.perceived_exertion || null,
-      training_load:   detail.weighted_average_watts || null,
       temperature:     detail.average_temp       !== undefined ? detail.average_temp + '°C' : null,
       description:     detail.description        || null,
       gear:            detail.gear?.name         || null,
-      // Splits
       splits_count:    splits.length,
       splits_str:      splitsStr,
-      // Zones FC
+      laps_count:      laps.length,
+      laps_str:        lapsStr,
+      has_interval_laps: hasIntervalLaps,
       zones_str:       zonesStr,
-      // Ratios utiles
-      hr_per_pace:     detail.average_heartrate && detail.average_speed
-        ? Math.round(detail.average_heartrate / (1000 / detail.average_speed) * 60)
-        : null,
     };
   },
 
@@ -265,21 +275,22 @@ const Strava = {
     let ctx = `DONNÉES COMPLÈTES DE LA COURSE :
 - Nom : ${s.name}
 - Date : ${s.date}
-- Distance : ${s.distance_km} km
-- Durée active : ${s.duration} (totale : ${s.elapsed})
+- Distance : ${s.distance_km} km · Durée active : ${s.duration} (totale : ${s.elapsed})
 - Allure moyenne : ${s.pace_avg}/km · Allure max : ${s.pace_max}/km
 - FC moyenne : ${s.hr_avg || 'N/A'} bpm · FC max : ${s.hr_max || 'N/A'} bpm
-- Cadence : ${s.cadence_avg || 'N/A'} foulées/min
-- Dénivelé positif : ${s.elevation_gain}m
-- Calories : ${s.calories || 'N/A'}
-- Suffer score : ${s.suffer_score || 'N/A'}
-- Effort perçu Strava : ${s.perceived_exertion || 'N/A'}/10
-- Température : ${s.temperature || 'N/A'}
+- Cadence : ${s.cadence_avg || 'N/A'} foulées/min · Dénivelé : +${s.elevation_gain}m
+- Calories : ${s.calories || 'N/A'} · Suffer score : ${s.suffer_score || 'N/A'}
+- Effort perçu Strava : ${s.perceived_exertion || 'N/A'}/10 · Température : ${s.temperature || 'N/A'}
 - Chaussures : ${s.gear || 'N/A'}`;
 
     if (s.description) ctx += `\n- Note Strava : "${s.description}"`;
 
-    if (s.splits_str) ctx += `\n\nDÉTAIL KM PAR KM :\n${s.splits_str}`;
+    // Laps en priorité si séance avec intervalles détectés
+    if (s.laps_str && s.laps_count > 1) {
+      ctx += `\n\nLAPS (${s.laps_count} tours marqués${s.has_interval_laps ? ' — séance fractionné détectée' : ''}) :\n${s.laps_str}`;
+    }
+
+    if (s.splits_str) ctx += `\n\nSPLITS KM PAR KM (${s.splits_count} km) :\n${s.splits_str}`;
     if (s.zones_str)  ctx += `\n\nZONES CARDIAQUES :\n${s.zones_str}`;
 
     return ctx;
