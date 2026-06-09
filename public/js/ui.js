@@ -27,13 +27,15 @@ const UI = {
     const el = document.getElementById('home-content');
     const now = new Date();
 
+    // weekKm en scope global de renderHome (utilisé aussi dans le bloc plan)
+    const weekKm = activities
+      .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
+      .reduce((s, a) => s + a.distance, 0) / 1000;
+
     // Metrics from recent activities
     let metricsHtml = '';
     if (activities.length > 0) {
       const lastPace = Strava.formatPace(activities[0].average_speed);
-      const weekKm = activities
-        .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
-        .reduce((s, a) => s + a.distance, 0) / 1000;
 
       // Stats annuelles depuis le cache local (si dispo)
       let yearStatsInner = '';
