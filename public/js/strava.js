@@ -258,6 +258,7 @@ const Strava = {
       temperature:     detail.average_temp       !== undefined ? detail.average_temp + '°C' : null,
       description:     detail.description        || null,
       gear:            detail.gear?.name         || null,
+      location:        [detail.location_city, detail.location_country].filter(Boolean).join(', ') || null,
       splits_count:    splits.length,
       splits_str:      splitsStr,
       laps_count:      laps.length,
@@ -281,7 +282,7 @@ const Strava = {
 - Cadence : ${s.cadence_avg || 'N/A'} foulées/min · Dénivelé : +${s.elevation_gain}m
 - Calories : ${s.calories || 'N/A'} · Suffer score : ${s.suffer_score || 'N/A'}
 - Effort perçu Strava : ${s.perceived_exertion || 'N/A'}/10 · Température : ${s.temperature || 'N/A'}
-- Chaussures : ${s.gear || 'N/A'}`;
+- Lieu : ${s.location || 'N/A'} · Chaussures : ${s.gear || 'N/A'}`;
 
     if (s.description) ctx += `\n- Note Strava : "${s.description}"`;
 

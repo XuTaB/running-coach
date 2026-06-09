@@ -371,6 +371,7 @@ Structure ta réponse en 3 points concis :
           const cad = a.average_cadence ? Math.round(a.average_cadence * 2) + 'spm' : '';
           const suf = a.suffer_score    ? 'suffer=' + a.suffer_score : '';
           const cal = a.calories        ? a.calories + 'kcal' : '';
+          const loc = [a.location_city, a.location_country].filter(Boolean).join(', ');
           line = '- ' + Strava.formatDate(a.start_date_local)
             + ': ' + Strava.formatDistance(a.distance) + 'km'
             + ', allure ' + Strava.formatPace(a.average_speed) + '/km'
@@ -378,7 +379,8 @@ Structure ta réponse en 3 points concis :
             + ', D+ ' + Math.round(a.total_elevation_gain||0) + 'm'
             + (cad ? ', ' + cad : '')
             + (suf ? ', ' + suf : '')
-            + (cal ? ', ' + cal : '');
+            + (cal ? ', ' + cal : '')
+            + (loc ? ', lieu=' + loc : '');
         }
 
         if (fb) {
