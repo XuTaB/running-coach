@@ -62,7 +62,7 @@ const Strava = {
     // Cache : 30 jours pour les années passées, 1h pour l'année en cours
     const currentYear = new Date().getFullYear();
     const cacheTTL = year < currentYear ? 30 * 86400000 : 3600000;
-    const cacheKey = 'strava_yearstats_' + year;
+    const cacheKey = 'strava_yearstats_v2_' + year;
     const cached   = localStorage.getItem(cacheKey);
     if (cached) {
       try {

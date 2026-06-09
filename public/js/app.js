@@ -421,7 +421,7 @@ const App = {
     const years = [currentYear, currentYear - 1, currentYear - 2];
     // Charge uniquement si au moins une année n'est pas en cache
     const needLoad = years.some(y => {
-      const c = localStorage.getItem('strava_yearstats_' + y);
+      const c = localStorage.getItem('strava_yearstats_v2_' + y);
       if (!c) return true;
       try {
         const parsed = JSON.parse(c);
@@ -489,7 +489,7 @@ const App = {
       if (this.currentTab === 'home')   UI.renderHome(Storage.getProfile(), activities, Storage.getPlan());
       // Invalide le cache de l'année en cours pour forcer refresh au prochain chargement
       const currentYear = new Date().getFullYear();
-      localStorage.removeItem('strava_yearstats_' + currentYear);
+      localStorage.removeItem('strava_yearstats_v2_' + currentYear);
     } else {
       if (!silent) UI.toast('Erreur de synchronisation');
     }

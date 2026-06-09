@@ -32,18 +32,15 @@ const UI = {
       .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
       .reduce((s, a) => s + a.distance, 0) / 1000;
 
-    // Metrics from recent activities
+    // Stats annuelles depuis le cache local (si dispo)
     let metricsHtml = '';
     if (activities.length > 0) {
-      const lastPace = Strava.formatPace(activities[0].average_speed);
-
-      // Stats annuelles depuis le cache local (si dispo)
       let yearStatsInner = '';
       try {
         const currentYear = now.getFullYear();
         const years = [currentYear, currentYear - 1, currentYear - 2];
         const statsArr = years.map(y => {
-          const c = localStorage.getItem('strava_yearstats_' + y);
+          const c = localStorage.getItem('strava_yearstats_v2_' + y);
           if (!c) return null;
           try { return JSON.parse(c).data; } catch(e) { return null; }
         }).filter(Boolean);
@@ -58,13 +55,7 @@ const UI = {
             </button>
            </div>`;
 
-      metricsHtml = `
-        <div class="metrics-row">
-          <div class="metric-tile"><div class="metric-val">${weekKm.toFixed(0)}</div><div class="metric-label">km cette semaine</div></div>
-          <div class="metric-tile"><div class="metric-val">${lastPace}</div><div class="metric-label">dernière allure</div></div>
-          <div class="metric-tile"><div class="metric-val">${activities.length}</div><div class="metric-label">courses total</div></div>
-        </div>
-        ${yearStatsBlock}`;
+      metricsHtml = yearStatsBlock;
     }
 
     // This week plan + next week
