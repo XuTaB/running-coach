@@ -327,26 +327,62 @@ Structure ta réponse en 3 points concis :
       + (p.vma    ? ' | VMA: '      + p.vma    + ' km/h'  : '')
       + (p.efPace ? ' | Allure EF: '+ p.efPace + '/km'    : ''));
 
-    // Dernières courses (8 max)
+    // Dernières courses (8 max) — données riches si en cache, sinon résumé basique
     const activities = Storage.getActivities().slice(0, 8);
     if (activities.length > 0) {
       lines.push('');
       lines.push('DERNIÈRES COURSES (8 dernières) :');
       activities.forEach(function(a) {
         const fb  = Storage.getFeedback(a.id);
-        const cad = a.average_cadence ? Math.round(a.average_cadence * 2) + 'spm' : '';
-        const suf = a.suffer_score    ? 'suffer=' + a.suffer_score : '';
-        const cal = a.calories        ? a.calories + 'kcal' : '';
-        let line  = '- ' + Strava.formatDate(a.start_date_local)
-          + ': ' + Strava.formatDistance(a.distance) + 'km'
-          + ', allure ' + Strava.formatPace(a.average_speed) + '/km'
-          + ', FC ' + (a.average_heartrate ? Math.round(a.average_heartrate) + '/' + (a.max_heartrate||'?') + ' bpm' : 'NC')
-          + ', D+ ' + Math.round(a.total_elevation_gain||0) + 'm'
-          + (cad ? ', ' + cad : '')
-          + (suf ? ', ' + suf : '')
-          + (cal ? ', ' + cal : '');
+
+        // Tente de lire le détail riche depuis le cache localStorage (v4)
+        var richDetail = null;
+        try {
+          var cached = localStorage.getItem('strava_detail_v4_' + a.id);
+          if (cached) richDetail = JSON.parse(cached);
+        } catch(e) {}
+
+        var line;
+        if (richDetail) {
+          // Résumé riche : laps + splits + zones si disponibles
+          var s = Strava.buildRichSummary(richDetail);
+          line = '- ' + s.date + ' · ' + s.distance_km + 'km'
+            + ', allure moy ' + s.pace_avg + '/km (max ' + s.pace_max + '/km)'
+            + ', FC ' + (s.hr_avg || 'NC') + '/' + (s.hr_max || '?') + ' bpm'
+            + ', D+ ' + s.elevation_gain + 'm'
+            + (s.cadence_avg ? ', ' + s.cadence_avg + 'spm' : '')
+            + (s.suffer_score ? ', suffer=' + s.suffer_score : '')
+            + (s.calories ? ', ' + s.calories + 'kcal' : '')
+            + (s.temperature ? ', ' + s.temperature : '');
+          // Laps si fractionné détecté
+          if (s.laps_str && s.laps_count > 1) {
+            line += '\n  Laps (' + s.laps_count + (s.has_interval_laps ? ' — fractionné' : '') + ') :\n'
+              + s.laps_str.split('\n').map(function(l) { return '  ' + l; }).join('\n');
+          } else if (s.splits_str) {
+            line += '\n  Splits km :\n'
+              + s.splits_str.split('\n').map(function(l) { return '  ' + l; }).join('\n');
+          }
+          if (s.zones_str) {
+            line += '\n  Zones FC :\n'
+              + s.zones_str.split('\n').map(function(l) { return '  ' + l; }).join('\n');
+          }
+        } else {
+          // Résumé basique depuis les données de liste Strava
+          const cad = a.average_cadence ? Math.round(a.average_cadence * 2) + 'spm' : '';
+          const suf = a.suffer_score    ? 'suffer=' + a.suffer_score : '';
+          const cal = a.calories        ? a.calories + 'kcal' : '';
+          line = '- ' + Strava.formatDate(a.start_date_local)
+            + ': ' + Strava.formatDistance(a.distance) + 'km'
+            + ', allure ' + Strava.formatPace(a.average_speed) + '/km'
+            + ', FC ' + (a.average_heartrate ? Math.round(a.average_heartrate) + '/' + (a.max_heartrate||'?') + ' bpm' : 'NC')
+            + ', D+ ' + Math.round(a.total_elevation_gain||0) + 'm'
+            + (cad ? ', ' + cad : '')
+            + (suf ? ', ' + suf : '')
+            + (cal ? ', ' + cal : '');
+        }
+
         if (fb) {
-          line += ' → ressenti: effort=' + (fb.effort||'-') + '/5'
+          line += '\n  Ressenti: effort=' + (fb.effort||'-') + '/5'
             + ' cardio=' + (fb.cardio||'-')
             + ' jambes=' + (fb.legs||'-')
             + ' mental=' + (fb.mental||'-')
