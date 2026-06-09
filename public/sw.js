@@ -1,6 +1,6 @@
 // sw.js — Service Worker PWA Coach Running v5
 // Stratégie : network-first pour tout (pas de cache JS/HTML)
-const CACHE_NAME = 'coach-running-v65';
+const CACHE_NAME = 'coach-running-v66';
 
 self.addEventListener('install', event => {
   self.skipWaiting();

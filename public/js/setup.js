@@ -651,8 +651,7 @@ const Setup = {
       createdAt: Date.now(),
     };
 
-    Storage.saveProfile(profile);
-    Storage.pushToCloud();
+    Storage.saveProfile(profile); // déclenche _syncProfile en interne
     UI.toast('Profil sauvegardé ✓');
     if (generatePlan) {
       App.showMainApp().then(function() {
