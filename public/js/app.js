@@ -411,7 +411,31 @@ const App = {
       });
       setTimeout(() => this.syncStrava(true), 1500);
       setTimeout(() => this.checkRunTest(), 3000);
+      // Auto-charge les stats annuelles si pas encore en cache
+      setTimeout(() => this._autoLoadYearStats(), 4000);
     }
+  },
+
+  async _autoLoadYearStats() {
+    const currentYear = new Date().getFullYear();
+    const years = [currentYear, currentYear - 1, currentYear - 2];
+    // Charge uniquement si au moins une année n'est pas en cache
+    const needLoad = years.some(y => {
+      const c = localStorage.getItem('strava_yearstats_' + y);
+      if (!c) return true;
+      try {
+        const parsed = JSON.parse(c);
+        const ttl = y < currentYear ? 30 * 86400000 : 3600000;
+        return Date.now() - parsed.ts > ttl;
+      } catch(e) { return true; }
+    });
+    if (!needLoad) return;
+    const results = await Promise.all(years.map(y => Strava.fetchYearStats(y)));
+    const statsArr = results.filter(Boolean);
+    if (!statsArr.length) return;
+    // Rafraîchit le bloc si on est sur l'accueil
+    const block = document.getElementById('year-stats-block');
+    if (block) block.innerHTML = UI.renderYearStats(statsArr);
   },
 
   async showTab(name) {
@@ -428,7 +452,6 @@ const App = {
     switch(name) {
       case 'home':     UI.renderHome(profile, this.activities, plan); break;
       case 'strava':   UI.renderStravaTab(Strava.isConnected(), this.activities); break;
-      case 'plan':     UI.renderPlanTab(plan, false); break;
       case 'coach':    UI.renderCoachTab(); break;
       case 'settings': UI.renderSettings(profile); break;
     }
@@ -441,30 +464,32 @@ const App = {
     block.innerHTML = '<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">Récupération des données Strava… (peut prendre quelques secondes)</div>';
 
     const currentYear = new Date().getFullYear();
-    const [s2025, s2026] = await Promise.all([
-      Strava.fetchYearStats(2025),
-      currentYear >= 2026 ? Strava.fetchYearStats(2026) : Promise.resolve(null)
-    ]);
+    const years = [currentYear, currentYear - 1, currentYear - 2];
+    const results = await Promise.all(years.map(y => Strava.fetchYearStats(y)));
+    const statsArr = results.filter(Boolean);
 
-    if (!s2025 && !s2026) {
+    if (!statsArr.length) {
       block.innerHTML = '<div style="font-size:12px;color:var(--text-hint);padding:8px 0;">Impossible de récupérer les stats. Réessaie.</div>';
       if (btn) { btn.disabled = false; btn.textContent = 'Réessayer'; }
       return;
     }
 
-    block.innerHTML = UI.renderYearStats(s2025, s2026);
+    block.innerHTML = UI.renderYearStats(statsArr);
     if (btn) btn.style.display = 'none';
   },
 
   async syncStrava(silent = false) {
     if (!Strava.isConnected()) { UI.toast('Strava non connecté'); return; }
     if (!silent) UI.toast('Synchronisation…');
-    const activities = await Strava.fetchActivities(30);
+    const activities = await Strava.fetchActivities(10);
     if (activities) {
       this.activities = activities;
       if (!silent) UI.toast(`${activities.length} courses synchronisées`);
       if (this.currentTab === 'strava') UI.renderStravaTab(true, activities);
       if (this.currentTab === 'home')   UI.renderHome(Storage.getProfile(), activities, Storage.getPlan());
+      // Invalide le cache de l'année en cours pour forcer refresh au prochain chargement
+      const currentYear = new Date().getFullYear();
+      localStorage.removeItem('strava_yearstats_' + currentYear);
     } else {
       if (!silent) UI.toast('Erreur de synchronisation');
     }
@@ -491,14 +516,12 @@ const App = {
         }]
       };
       Storage.savePlan(runTestPlan);
-      this.showTab('plan');
-      UI.renderPlanTab(runTestPlan, false);
+      UI.renderHome(Storage.getProfile(), this.activities, runTestPlan);
       UI.toast('Run test planifié — Lance-toi quand tu es prêt !');
       return;
     }
 
-    this.showTab('plan');
-    UI.renderPlanTab(null, true);
+    UI.toast('⏳ Génération du plan…');
 
     let raw = null;
     try {
@@ -509,7 +532,6 @@ const App = {
 
     if (!raw) {
       UI.toast('Le coach est indisponible — réessaie dans quelques secondes');
-      UI.renderPlanTab(null, false);
       return;
     }
 
@@ -570,13 +592,12 @@ const App = {
       }));
 
       Storage.savePlan(plan);
-      UI.renderPlanTab(plan, false);
+      UI.renderHome(Storage.getProfile(), this.activities, plan);
       UI.toast('Plan généré ✓');
 
     } catch(e) {
       console.error('[generatePlan] Erreur finale:', e.message);
       UI.toast('Erreur de génération — réessaie');
-      UI.renderPlanTab(null, false);
     }
   },
 

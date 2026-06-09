@@ -61,6 +61,7 @@ const Setup = {
       <button class="btn-back" onclick="${hasProfile && isFirst ? 'App.showMainApp()' : 'Setup.prev()'}">
         ${hasProfile && isFirst ? '✕' : '←'}
       </button>
+      ${hasProfile ? `<button class="btn-save-quit" onclick="Setup.saveAndQuit()">💾 Quitter</button>` : ''}
       <button class="btn-next" onclick="Setup.next()">
         ${isLast ? 'Terminer →' : 'Suivant →'}
       </button>`;
@@ -577,9 +578,20 @@ const Setup = {
     return true;
   },
 
+  // ── Sauvegarde & quitter (sans régénérer le plan) ───────────────────────────
+  saveAndQuit() {
+    this._saveCurrentStep(true);
+    this._buildAndSaveProfile(false);
+    App.showMainApp();
+  },
+
   // ── Finalisation ────────────────────────────────────────────────────────────
   _finish() {
     this._saveCurrentStep(true);
+    this._buildAndSaveProfile(true);
+  },
+
+  _buildAndSaveProfile(generatePlan) {
     const d = this.data;
 
     const profile = {
@@ -640,11 +652,13 @@ const Setup = {
     };
 
     Storage.saveProfile(profile);
+    Storage.pushToCloud();
     UI.toast('Profil sauvegardé ✓');
-    App.showMainApp().then(function() {
-      // Génère le plan automatiquement après le wizard
-      setTimeout(function() { App.generatePlan(); }, 800);
-    });
+    if (generatePlan) {
+      App.showMainApp().then(function() {
+        setTimeout(function() { App.generatePlan(); }, 800);
+      });
+    }
   },
 
   // ── Helpers UI ──────────────────────────────────────────────────────────────

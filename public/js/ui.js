@@ -39,20 +39,20 @@ const UI = {
       let yearStatsInner = '';
       try {
         const currentYear = now.getFullYear();
-        const c2025 = localStorage.getItem('strava_yearstats_2025');
-        const c2026 = localStorage.getItem('strava_yearstats_' + currentYear);
-        const s2025 = c2025 ? JSON.parse(c2025).data : null;
-        const s2026 = (currentYear >= 2026 && c2026) ? JSON.parse(c2026).data : null;
-        if (s2025 || s2026) {
-          yearStatsInner = this.renderYearStats(s2025, s2026);
-        }
+        const years = [currentYear, currentYear - 1, currentYear - 2];
+        const statsArr = years.map(y => {
+          const c = localStorage.getItem('strava_yearstats_' + y);
+          if (!c) return null;
+          try { return JSON.parse(c).data; } catch(e) { return null; }
+        }).filter(Boolean);
+        if (statsArr.length) yearStatsInner = this.renderYearStats(statsArr);
       } catch(e) {}
 
       const yearStatsBlock = yearStatsInner
         ? `<div id="year-stats-block" style="margin-top:10px;">${yearStatsInner}</div>`
         : `<div id="year-stats-block" style="margin-top:10px;">
             <button class="btn-ghost" style="width:100%;font-size:13px;padding:9px 0;" onclick="App.loadYearStats(this)">
-              📊 Charger les stats annuelles 2025 / 2026
+              📊 Charger les stats des 3 dernières années
             </button>
            </div>`;
 
@@ -71,19 +71,31 @@ const UI = {
       const weekDates0 = this._getWeekDates(0);
       const weekDates1 = this._getWeekDates(1);
 
-      const renderHomeWeek = (week, weekDates, skipPast, title) => {
+      const renderHomeWeek = (week, weekDates, skipPast, isCurrentWeek) => {
         const daysHtml = this._sortDays(week.days)
           .filter(d => d.type !== 'rest' && d.type !== 'recup')
           .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
           .filter(Boolean)
           .join('');
         if (!daysHtml && skipPast) return ''; // semaine en cours déjà passée
-        return '<div class="section-header"><div class="section-title">' + title + '</div><span class="volume-badge">' + week.volume_km + ' km</span></div>' +
-          '<div class="card" style="padding: 8px 14px;">' + (daysHtml || '<div style="padding:8px 0;font-size:13px;color:var(--text-hint);text-align:center;">Aucune séance</div>') + '</div>';
+        let header;
+        if (isCurrentWeek) {
+          const doneKm = weekKm.toFixed(0);
+          const plannedKm = week.volume_km || 0;
+          header = '<div class="section-header">'
+            + '<div class="section-title">Semaine en cours'
+            + ' <span style="font-weight:400;font-size:13px;color:var(--text-muted);">' + doneKm + ' / ' + plannedKm + ' km</span>'
+            + '</div>'
+            + '<button class="btn-ghost" style="font-size:12px;padding:5px 10px;" onclick="App.generatePlan()">↻ Recalculer</button>'
+            + '</div>';
+        } else {
+          header = '<div class="section-header"><div class="section-title">Semaine prochaine</div><span class="volume-badge">' + week.volume_km + ' km</span></div>';
+        }
+        return header + '<div class="card" style="padding: 8px 14px;">' + (daysHtml || '<div style="padding:8px 0;font-size:13px;color:var(--text-hint);text-align:center;">Aucune séance</div>') + '</div>';
       };
 
-      planHtml = renderHomeWeek(plan.weeks[0], weekDates0, true, 'Cette semaine');
-      if (plan.weeks[1]) planHtml += renderHomeWeek(plan.weeks[1], weekDates1, false, 'Semaine prochaine');
+      planHtml = renderHomeWeek(plan.weeks[0], weekDates0, true, true);
+      if (plan.weeks[1]) planHtml += renderHomeWeek(plan.weeks[1], weekDates1, false, false);
     } else {
       planHtml = `
         <div class="section-header"><div class="section-title">Plan d'entraînement</div></div>
@@ -685,7 +697,12 @@ const UI = {
   },
 
   // ── Stats annuelles ───────────────────────────────────────────────────────────
-  renderYearStats(stats2025, stats2026) {
+  renderYearStats(statsArr) {
+    // Accepte un tableau de stats (ordre : année la plus récente en premier)
+    if (!Array.isArray(statsArr)) {
+      // Rétrocompatibilité si appelé avec les anciens paramètres (s2025, s2026)
+      statsArr = [arguments[1], arguments[0]].filter(Boolean);
+    }
     const fmtKm  = km  => km.toFixed(0) + ' km';
     const fmtDur = sec => {
       const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
@@ -700,10 +717,11 @@ const UI = {
 
     const row = (s) => {
       if (!s) return '';
+      const longestStr = s.longestKm ? s.longestKm.toFixed(1) + ' km' : '--';
       return `
         <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
           <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:10px;">${s.year}</div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;">
             <div>
               <div style="font-size:20px;font-weight:800;color:var(--text);">${s.count}</div>
               <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">courses</div>
@@ -718,18 +736,21 @@ const UI = {
             </div>
             <div>
               <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtElev(s.totalElevation)}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">dénivelé</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">dénivelé +</div>
             </div>
-          </div>
-          <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);
-                      display:flex;gap:16px;font-size:12px;color:var(--text-muted);">
-            <span>⚡ Allure moy. <strong>${fmtPace(s.avgPace)}</strong></span>
-            <span>📅 <strong>${(s.totalKm / 52).toFixed(1)} km</strong>/semaine en moyenne</span>
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtPace(s.avgPace)}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">allure moy.</div>
+            </div>
+            <div>
+              <div style="font-size:20px;font-weight:800;color:var(--text);">${longestStr}</div>
+              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">+ longue</div>
+            </div>
           </div>
         </div>`;
     };
 
-    return (row(stats2026) || '') + (row(stats2025) || '');
+    return statsArr.map(s => row(s)).join('');
   },
 
   // ── Carte OSM Leaflet (lazy via IntersectionObserver) ────────────────────────
@@ -1149,6 +1170,18 @@ const UI = {
   },
 
   // Génère le HTML d'une ligne de séance
+  // Extrait le sous-type court d'une séance intense (VMA, Seuil, Tempo…)
+  _getIntensityBadge(d, resolvedType) {
+    if (resolvedType !== 'work' && resolvedType !== 'vma' && resolvedType !== 'tempo') return null;
+    const lbl = (d.label || '').toLowerCase();
+    if (/\bvma\b/.test(lbl))                         return 'VMA';
+    if (/seuil|threshold/.test(lbl))                 return 'Seuil';
+    if (/tempo/.test(lbl))                           return 'Tempo';
+    if (/court|short|rapide/.test(lbl))              return 'VMA';
+    if (resolvedType === 'tempo')                    return 'Seuil';
+    return 'VMA'; // work sans précision → VMA par défaut
+  },
+
   _renderPlanDay(d, weekDates, now, skipPast) {
     const typeClass = {ef:'pill-ef',tempo:'pill-tempo',vma:'pill-vma',work:'pill-vma',sl:'pill-sl',rest:'pill-rest',recup:'pill-rest',free:'pill-ef',test:'pill-test',seuil:'pill-tempo',threshold:'pill-tempo'};
     const resolvedType = this._resolveType(d);
@@ -1161,13 +1194,19 @@ const UI = {
     const isToday = date && date.toDateString() === now.toDateString();
     const dateNum = date ? date.getDate() : '';
     const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
+    const intensityBadge = this._getIntensityBadge(d, resolvedType);
+    const pillLabel = intensityBadge ? ('⚡ ' + intensityBadge) : d.label;
+    // Pour les séances intenses avec badge : afficher le label complet dans le détail
     const detailHtml = this._SIMPLE_TYPES[resolvedType]
       ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + this._extractWorkPart(d.detail) + '</div>' : '')
-      : this._renderSessionPhases(d.detail, d.label);
+      : (intensityBadge
+          ? '<div class="session-detail" style="margin-top:2px;font-size:12px;color:var(--text-muted);">' + d.label + '</div>'
+            + this._renderSessionPhases(d.detail, d.label)
+          : this._renderSessionPhases(d.detail, d.label));
     return '<div class="day-row">' +
       '<div class="day-name' + (isToday ? ' today' : '') + '">' + dayLabel + '</div>' +
       '<div style="flex:1;">' +
-      '<span class="session-pill ' + (typeClass[resolvedType] || 'pill-ef') + '">' + d.label + '</span>' +
+      '<span class="session-pill ' + (typeClass[resolvedType] || 'pill-ef') + '">' + pillLabel + '</span>' +
       detailHtml +
       '</div>' +
       '</div>';

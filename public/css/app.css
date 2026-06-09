@@ -114,6 +114,11 @@ input, select, textarea { font-family: var(--font); }
   font-size: 16px; color: var(--text-muted);
   background: var(--bg2); flex-shrink: 0;
 }
+.btn-save-quit {
+  padding: 14px 14px; border-radius: var(--radius-xl);
+  font-size: 13px; font-weight: 500; color: var(--text-muted);
+  background: var(--bg2); flex-shrink: 0; white-space: nowrap;
+}
 .btn-next {
   flex: 1; padding: 14px;
   background: var(--orange); color: white; border-radius: var(--radius-xl);

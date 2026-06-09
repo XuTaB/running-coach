@@ -59,13 +59,15 @@ const Strava = {
     const token = await this.getValidToken();
     if (!token) return null;
 
-    // Vérifier le cache (1h)
+    // Cache : 30 jours pour les années passées, 1h pour l'année en cours
+    const currentYear = new Date().getFullYear();
+    const cacheTTL = year < currentYear ? 30 * 86400000 : 3600000;
     const cacheKey = 'strava_yearstats_' + year;
     const cached   = localStorage.getItem(cacheKey);
     if (cached) {
       try {
         const c = JSON.parse(cached);
-        if (Date.now() - c.ts < 3600000) return c.data;
+        if (Date.now() - c.ts < cacheTTL) return c.data;
       } catch(e) {}
     }
 
@@ -91,18 +93,18 @@ const Strava = {
       }
     } catch(e) { console.error('fetchYearStats error', e); return null; }
 
+    const totalDist = allRuns.reduce((s, a) => s + (a.distance || 0), 0);
+    const totalMove = allRuns.reduce((s, a) => s + (a.moving_time || 0), 0);
+    const longestKm = allRuns.reduce((max, a) => Math.max(max, (a.distance || 0) / 1000), 0);
     const data = {
       year,
       count:          allRuns.length,
-      totalKm:        allRuns.reduce((s, a) => s + (a.distance || 0), 0) / 1000,
-      totalSeconds:   allRuns.reduce((s, a) => s + (a.moving_time || 0), 0),
+      totalKm:        totalDist / 1000,
+      totalSeconds:   totalMove,
       totalElevation: Math.round(allRuns.reduce((s, a) => s + (a.total_elevation_gain || 0), 0)),
-      avgPace:        null
+      longestKm:      Math.round(longestKm * 10) / 10,
+      avgPace:        totalDist > 0 ? totalMove / (totalDist / 1000) : null
     };
-    // Allure moyenne globale (m/s → sec/km)
-    const totalDist = allRuns.reduce((s, a) => s + (a.distance || 0), 0);
-    const totalMove = allRuns.reduce((s, a) => s + (a.moving_time || 0), 0);
-    if (totalDist > 0) data.avgPace = totalMove / (totalDist / 1000);
 
     localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
     return data;
