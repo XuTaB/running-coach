@@ -28,8 +28,12 @@ const UI = {
     const now = new Date();
 
     // weekKm en scope global de renderHome (utilisé aussi dans le bloc plan)
+    // Début de la semaine ISO en cours (lundi 00:00:00 local)
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
     const weekKm = activities
-      .filter(a => (now - new Date(a.start_date_local)) < 7 * 86400000)
+      .filter(a => new Date(a.start_date_local) >= weekStart)
       .reduce((s, a) => s + a.distance, 0) / 1000;
 
     // Stats annuelles depuis le cache local (si dispo)
