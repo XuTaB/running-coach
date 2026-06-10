@@ -419,23 +419,28 @@ const App = {
   async _autoLoadYearStats() {
     const currentYear = new Date().getFullYear();
     const years = [currentYear, currentYear - 1, currentYear - 2];
-    // Charge uniquement si au moins une année n'est pas en cache
-    const needLoad = years.some(y => {
-      const c = localStorage.getItem('strava_yearstats_v2_' + y);
-      if (!c) return true;
-      try {
-        const parsed = JSON.parse(c);
-        const ttl = y < currentYear ? 30 * 86400000 : 3600000;
-        return Date.now() - parsed.ts > ttl;
-      } catch(e) { return true; }
-    });
-    if (!needLoad) return;
-    const results = await Promise.all(years.map(y => Strava.fetchYearStats(y)));
-    const statsArr = results.filter(Boolean);
-    if (!statsArr.length) return;
-    // Rafraîchit le bloc si on est sur l'accueil
+    const stored = Storage.getYearlyStats();
+
+    // Années passées : fetch uniquement si pas en base
+    // Année courante : toujours re-fetcher pour être à jour
+    const toFetch = years.filter(y => y === currentYear || !stored[y]);
+    if (!toFetch.length) return; // tout est déjà en base, rien à faire
+
+    const results = await Promise.all(toFetch.map(y => Strava.fetchYearStats(y)));
+    const fetched = {};
+    results.forEach(s => { if (s) fetched[s.year] = s; });
+    if (!Object.keys(fetched).length) return;
+
+    // Merge et sauvegarde en base
+    const all = { ...stored, ...fetched };
+    Storage.saveYearlyStats(all);
+
+    // Rafraîchit l'affichage si on est sur l'accueil
     const block = document.getElementById('year-stats-block');
-    if (block) block.innerHTML = UI.renderYearStats(statsArr);
+    if (block) {
+      const arr = years.map(y => all[y]).filter(Boolean);
+      block.innerHTML = UI.renderYearStats(arr);
+    }
   },
 
   async showTab(name) {
@@ -474,6 +479,11 @@ const App = {
       return;
     }
 
+    // Sauvegarde en base
+    const statsObj = {};
+    statsArr.forEach(s => { statsObj[s.year] = s; });
+    Storage.saveYearlyStats({ ...Storage.getYearlyStats(), ...statsObj });
+
     block.innerHTML = UI.renderYearStats(statsArr);
     if (btn) btn.style.display = 'none';
   },
@@ -487,9 +497,19 @@ const App = {
       if (!silent) UI.toast(`${activities.length} courses synchronisées`);
       if (this.currentTab === 'strava') UI.renderStravaTab(true, activities);
       if (this.currentTab === 'home')   UI.renderHome(Storage.getProfile(), activities, Storage.getPlan());
-      // Invalide le cache de l'année en cours pour forcer refresh au prochain chargement
+      // Recharge les stats de l'année en cours depuis Strava et sauvegarde en base
       const currentYear = new Date().getFullYear();
-      localStorage.removeItem('strava_yearstats_v2_' + currentYear);
+      Strava.fetchYearStats(currentYear, true).then(s => {
+        if (!s) return;
+        const all = Storage.getYearlyStats();
+        all[currentYear] = s;
+        Storage.saveYearlyStats(all);
+        const block = document.getElementById('year-stats-block');
+        if (block && block.querySelector('.year-stats-row')) {
+          const arr = Object.values(all).sort((a, b) => b.year - a.year).slice(0, 3);
+          block.innerHTML = UI.renderYearStats(arr);
+        }
+      });
     } else {
       if (!silent) UI.toast('Erreur de synchronisation');
     }

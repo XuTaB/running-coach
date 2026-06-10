@@ -42,6 +42,13 @@ const Storage = {
     this._syncPlan(plan); // synchro cloud
   },
 
+  // ── Stats annuelles ─────────────────────────────────────────────────────────
+  getYearlyStats()       { return this.get().yearlyStats || {}; },
+  saveYearlyStats(stats) {
+    this.update({ yearlyStats: stats });
+    this._syncYearlyStats(stats);
+  },
+
   // ── Chat ────────────────────────────────────────────────────────────────────
   getChatHistory()         { return this.get().chatHistory || []; },
   getChatSummary()         { return this.get().chatSummary || null; },
@@ -88,10 +95,11 @@ const Storage = {
     } catch(e) { /* silencieux */ }
   },
 
-  async _syncProfile(profile)              { this._post('/api/data/profile',  { profile }); },
-  async _syncFeedback(activityId, feedback){ this._post('/api/data/feedback', { activityId, feedback }); },
-  async _syncPlan(plan)                    { this._post('/api/data/plan',     { plan }); },
-  async _syncChat(messages)                { this._post('/api/data/chat',     { messages }); },
+  async _syncProfile(profile)              { this._post('/api/data/profile',      { profile }); },
+  async _syncFeedback(activityId, feedback){ this._post('/api/data/feedback',     { activityId, feedback }); },
+  async _syncPlan(plan)                    { this._post('/api/data/plan',         { plan }); },
+  async _syncChat(messages)                { this._post('/api/data/chat',         { messages }); },
+  async _syncYearlyStats(stats)            { this._post('/api/data/yearlystats',  { stats }); },
 
   // ── Pull depuis la base (au login ou reconnexion sur un nouvel appareil) ────
   async pullFromCloud() {
@@ -107,10 +115,11 @@ const Storage = {
       const local  = this.get();
       const merged = {
         ...local,
-        profile:     data.profile      || local.profile,
-        plan:        data.plan          || local.plan,
+        profile:     data.profile        || local.profile,
+        plan:        data.plan            || local.plan,
         feedbacks:   { ...(local.feedbacks || {}), ...(data.feedbacks || {}) },
-        chatHistory: data.chat_history  || local.chatHistory || []
+        chatHistory: data.chat_history    || local.chatHistory || [],
+        yearlyStats: { ...(local.yearlyStats || {}), ...(data.yearly_stats || {}) }
       };
       this.set(merged);
       console.log('[Storage] ✅ Données cloud chargées');

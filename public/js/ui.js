@@ -39,11 +39,8 @@ const UI = {
       try {
         const currentYear = now.getFullYear();
         const years = [currentYear, currentYear - 1, currentYear - 2];
-        const statsArr = years.map(y => {
-          const c = localStorage.getItem('strava_yearstats_v2_' + y);
-          if (!c) return null;
-          try { return JSON.parse(c).data; } catch(e) { return null; }
-        }).filter(Boolean);
+        const stored = Storage.getYearlyStats();
+        const statsArr = years.map(y => stored[y]).filter(Boolean);
         if (statsArr.length) yearStatsInner = this.renderYearStats(statsArr);
       } catch(e) {}
 
@@ -712,7 +709,7 @@ const UI = {
       if (!s) return '';
       const longestStr = s.longestKm ? s.longestKm.toFixed(1) + ' km' : '--';
       return `
-        <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
+        <div class="year-stats-row" style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
           <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:10px;">${s.year}</div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;">
             <div>

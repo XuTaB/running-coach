@@ -54,22 +54,11 @@ const Strava = {
     } catch(e) { console.error('Fetch activities error', e); return null; }
   },
 
-  // ── Stats annuelles : toutes les runs d'une année (pagination complète) ──────
+  // ── Stats annuelles : fetch complet depuis Strava (sans cache localStorage) ──
+  // La persistence est gérée par Storage.saveYearlyStats() → Supabase
   async fetchYearStats(year) {
     const token = await this.getValidToken();
     if (!token) return null;
-
-    // Cache : 30 jours pour les années passées, 1h pour l'année en cours
-    const currentYear = new Date().getFullYear();
-    const cacheTTL = year < currentYear ? 30 * 86400000 : 3600000;
-    const cacheKey = 'strava_yearstats_v2_' + year;
-    const cached   = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const c = JSON.parse(cached);
-        if (Date.now() - c.ts < cacheTTL) return c.data;
-      } catch(e) {}
-    }
 
     const afterTs  = Math.floor(new Date(year + '-01-01T00:00:00Z').getTime() / 1000);
     const beforeTs = Math.floor(new Date((year + 1) + '-01-01T00:00:00Z').getTime() / 1000);
@@ -84,11 +73,8 @@ const Strava = {
         if (!res.ok) break;
         const batch = await res.json();
         if (!Array.isArray(batch) || !batch.length) break;
-
-        const runs = batch.filter(a => a.type === 'Run' || a.sport_type === 'Run');
-        allRuns = allRuns.concat(runs);
-
-        if (batch.length < 200) break;  // dernière page
+        allRuns = allRuns.concat(batch.filter(a => a.type === 'Run' || a.sport_type === 'Run'));
+        if (batch.length < 200) break;
         page++;
       }
     } catch(e) { console.error('fetchYearStats error', e); return null; }
@@ -96,7 +82,7 @@ const Strava = {
     const totalDist = allRuns.reduce((s, a) => s + (a.distance || 0), 0);
     const totalMove = allRuns.reduce((s, a) => s + (a.moving_time || 0), 0);
     const longestKm = allRuns.reduce((max, a) => Math.max(max, (a.distance || 0) / 1000), 0);
-    const data = {
+    return {
       year,
       count:          allRuns.length,
       totalKm:        totalDist / 1000,
@@ -105,9 +91,6 @@ const Strava = {
       longestKm:      Math.round(longestKm * 10) / 10,
       avgPace:        totalDist > 0 ? totalMove / (totalDist / 1000) : null
     };
-
-    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data }));
-    return data;
   },
 
   // ── Détail complet d'une activité ────────────────────────────────────────────

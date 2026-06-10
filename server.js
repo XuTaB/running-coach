@@ -32,10 +32,16 @@ if (process.env.DATABASE_URL) {
           feedbacks     JSONB DEFAULT '{}'::jsonb,
           plan          JSONB DEFAULT 'null'::jsonb,
           chat_history  JSONB DEFAULT '[]'::jsonb,
+          yearly_stats  JSONB DEFAULT '{}'::jsonb,
           created_at    TIMESTAMPTZ DEFAULT NOW(),
           updated_at    TIMESTAMPTZ DEFAULT NOW()
         )
-      `).then(() => {
+      `)
+      .then(() => client.query(`
+        ALTER TABLE public.user_data
+          ADD COLUMN IF NOT EXISTS yearly_stats JSONB DEFAULT '{}'::jsonb
+      `))
+      .then(() => {
         console.log('✅ Table user_data vérifiée');
         client.release();
       });
@@ -217,6 +223,9 @@ app.get('/api/data/sync', async (req, res) => {
 
   try {
     const row = await dbGet(athleteId);
+    if (row && typeof row.yearly_stats === 'string') {
+      try { row.yearly_stats = JSON.parse(row.yearly_stats); } catch(e) { row.yearly_stats = {}; }
+    }
     res.json({ mode: 'cloud', data: row || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -274,6 +283,21 @@ app.post('/api/data/chat', async (req, res) => {
   if (!req.session.athleteId) req.session.athleteId = parseInt(athleteId);
   try {
     await dbUpsert(athleteId, { chat_history: JSON.stringify(req.body.messages) });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/data/yearlystats', async (req, res) => {
+  if (!db) return res.json({ ok: true, mode: 'local' });
+  const athleteId = getAthleteId(req);
+  if (!athleteId) return res.status(401).json({ error: 'Non authentifié' });
+  if (!req.session.athleteId) req.session.athleteId = parseInt(athleteId);
+  try {
+    // Merge avec les stats existantes (ne pas écraser les autres années)
+    const row = await dbGet(athleteId) || {};
+    const existing = row.yearly_stats || {};
+    const merged = { ...existing, ...req.body.stats };
+    await dbUpsert(athleteId, { yearly_stats: JSON.stringify(merged) });
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
