@@ -134,20 +134,8 @@ const UI = {
       ? activities.map(a => this.renderActivityCard(a, true)).join('')
       : `<div class="empty-state"><div class="empty-state-icon">🏃</div><div class="empty-state-title">Aucune course</div><div class="empty-state-sub">${isConnected ? 'Synchronise Strava pour importer tes courses.' : 'Connecte ton compte Strava pour commencer.'}</div></div>`;
 
-    const yearStatsHtml = isConnected ? `
-      <div class="section-header" style="margin-top:8px;">
-        <div class="section-title">Stats annuelles</div>
-        <button class="btn-ghost" onclick="App.loadYearStats(this)" style="font-size:12px;">Charger</button>
-      </div>
-      <div id="year-stats-block" style="margin-bottom:8px;">
-        <div style="font-size:12px;color:var(--text-hint);padding:8px 0;">
-          Appuie sur "Charger" pour récupérer toutes tes courses sur Strava.
-        </div>
-      </div>` : '';
-
     el.innerHTML = `
       ${connectBanner}
-      ${yearStatsHtml}
       <div class="section-header" style="margin-top:4px;">
         <div class="section-title">Courses récentes</div>
         ${isConnected ? `<button class="btn-ghost" onclick="App.syncStrava()">↻ Sync</button>` : ''}
