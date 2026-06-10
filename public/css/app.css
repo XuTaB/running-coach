@@ -204,6 +204,7 @@ input[type=range]::-moz-range-thumb {
 
 /* ===== TOP BAR ===== */
 .top-bar {
+  position: relative;
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(var(--safe-top) + 14px) 16px 12px;
   background: var(--bg);
@@ -211,6 +212,9 @@ input[type=range]::-moz-range-thumb {
   flex-shrink: 0;
 }
 .top-bar-left { display: flex; align-items: center; gap: 10px; }
+.top-bar-center { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.app-title-strava { font-size: 16px; font-weight: 900; letter-spacing: 0.08em; color: var(--text); font-style: italic; }
+.app-title-orange { color: var(--orange); }
 .top-bar-right { display: flex; gap: 6px; }
 .avatar {
   width: 36px; height: 36px; border-radius: 50%;

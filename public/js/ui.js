@@ -1548,21 +1548,42 @@ const UI = {
   // ===== SETTINGS TAB =====
   renderSettings(profile) {
     const el = document.getElementById('settings-content');
+    const arrow = `<svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+    // Objectif principal : nom + distance
+    const goalVal = profile?.goal
+      ? [profile.goal.name, profile.goal.dist].filter(Boolean).join(' · ')
+      : (profile?.fitFocus || '—');
+
+    // Records personnels : affiche tous ceux qui existent
+    const prs = profile?.prs || {};
+    const prParts = [
+      prs.km10    ? `10km ${prs.km10}`    : null,
+      prs.half    ? `Semi ${prs.half}`    : null,
+      prs.marathon? `Marathon ${prs.marathon}` : null,
+    ].filter(Boolean);
+    const prsVal = prParts.length ? prParts.join(' · ') : '—';
+
+    // Jours triés lun→dim
+    const DAY_ORDER = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+    const sortedDays = (profile?.trainingDays || [])
+      .slice().sort((a,b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b));
+
     el.innerHTML = `
       <div class="settings-section">
         <div class="settings-group-label">Objectifs</div>
         <div class="settings-row" onclick="App.editProfile('goal')">
           <span class="settings-label">Objectif principal</span>
           <div style="display:flex;align-items:center;gap:6px;">
-            <span class="settings-value">${profile?.goal?.name || '—'}</span>
-            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="settings-value">${goalVal}</span>
+            ${arrow}
           </div>
         </div>
         <div class="settings-row" onclick="App.editProfile('prs')">
           <span class="settings-label">Records personnels</span>
           <div style="display:flex;align-items:center;gap:6px;">
-            <span class="settings-value">${profile?.prs?.km10 ? profile.prs.km10 : '—'}</span>
-            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="settings-value" style="font-size:12px;">${prsVal}</span>
+            ${arrow}
           </div>
         </div>
       </div>
@@ -1571,8 +1592,8 @@ const UI = {
         <div class="settings-row" onclick="App.editProfile('schedule')">
           <span class="settings-label">Jours d'entraînement</span>
           <div style="display:flex;align-items:center;gap:6px;">
-            <span class="settings-value">${profile?.trainingDays?.join(', ') || '—'}</span>
-            <svg class="settings-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="settings-value">${sortedDays.join(', ') || '—'}</span>
+            ${arrow}
           </div>
         </div>
       </div>

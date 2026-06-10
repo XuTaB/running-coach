@@ -390,7 +390,8 @@ const App = {
       document.getElementById('user-name').textContent = name === 'Toi' ? 'Mon profil' : name;
       if (profile.goal?.date && profile.goal?.name) {
         const days = Math.round((new Date(profile.goal.date) - Date.now()) / 86400000);
-        document.getElementById('countdown-label').textContent = `J−${days} · ${profile.goal.name}`;
+        const distLabel = profile.goal.dist ? ` · ${profile.goal.dist}` : '';
+        document.getElementById('countdown-label').textContent = `J−${days} · ${profile.goal.name}${distLabel}`;
       }
     }
 
@@ -684,12 +685,13 @@ const App = {
     const existing = Storage.getProfile();
     this.showScreen('setup');
     Setup.start(existing);
-    // Saute à la bonne section si précisée
-    const stepMap = { general: 0, goal: 3, schedule: 5, prs: 6 };
-    if (section && stepMap[section] !== undefined) {
+    if (section) {
       setTimeout(() => {
-        Setup.stepIndex = stepMap[section];
-        Setup._render();
+        // Mappe les raccourcis vers les vrais IDs de step
+        const stepAliases = { goal: ['goal_race','goal_fitness','goal_start','goal_main'], prs: ['prs'], schedule: ['schedule'] };
+        const candidates = stepAliases[section] || [section];
+        const idx = Setup.steps.findIndex(s => candidates.includes(s));
+        if (idx >= 0) { Setup.stepIndex = idx; Setup._render(); }
       }, 50);
     }
   },
