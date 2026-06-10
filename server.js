@@ -41,8 +41,11 @@ if (process.env.DATABASE_URL) {
         ALTER TABLE public.user_data
           ADD COLUMN IF NOT EXISTS yearly_stats JSONB DEFAULT '{}'::jsonb
       `))
+      .then(() => client.query(`
+        ALTER TABLE public.user_data ENABLE ROW LEVEL SECURITY
+      `))
       .then(() => {
-        console.log('✅ Table user_data vérifiée');
+        console.log('✅ Table user_data vérifiée (RLS activé)');
         client.release();
       });
     })
