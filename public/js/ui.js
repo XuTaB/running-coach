@@ -708,34 +708,20 @@ const UI = {
     const row = (s) => {
       if (!s) return '';
       const longestStr = s.longestKm ? s.longestKm.toFixed(1) + ' km' : '--';
+      const stat = (val, lbl) => `<div style="min-width:0;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;">${val}</div>
+        <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">${lbl}</div>
+      </div>`;
       return `
-        <div class="year-stats-row" style="background:var(--bg2);border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:10px;">${s.year}</div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;">
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${s.count}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">courses</div>
-            </div>
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtKm(s.totalKm)}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">distance</div>
-            </div>
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtDur(s.totalSeconds)}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">temps</div>
-            </div>
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtElev(s.totalElevation)}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">dénivelé +</div>
-            </div>
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${fmtPace(s.avgPace)}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">allure moy.</div>
-            </div>
-            <div>
-              <div style="font-size:20px;font-weight:800;color:var(--text);">${longestStr}</div>
-              <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">+ longue</div>
-            </div>
+        <div class="year-stats-row" style="padding:8px 0;border-bottom:0.5px solid var(--border);">
+          <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:6px;">${s.year}</div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;text-align:center;">
+            ${stat(s.count, 'courses')}
+            ${stat(fmtKm(s.totalKm), 'distance')}
+            ${stat(fmtDur(s.totalSeconds), 'temps')}
+            ${stat(fmtElev(s.totalElevation), 'D+')}
+            ${stat(fmtPace(s.avgPace), 'allure')}
+            ${stat(longestStr, 'max')}
           </div>
         </div>`;
     };
@@ -1185,7 +1171,18 @@ const UI = {
     const dateNum = date ? date.getDate() : '';
     const dayLabel = d.day + (dateNum ? ' ' + dateNum : '');
     const intensityBadge = this._getIntensityBadge(d, resolvedType);
-    const pillLabel = intensityBadge ? ('⚡ ' + intensityBadge) : d.label;
+    // Corrige le label si incohérent avec le type résolu (ex: label "EF" mais type sl)
+    const _typeDefaultLabel = { ef:'Endurance fondamentale', sl:'Sortie longue', tempo:'Séance seuil', work:'Fractionné', recup:'Récupération', free: d.label };
+    const _labelOk = (() => {
+      const l = (d.label||'').toLowerCase();
+      if (resolvedType==='sl')    return /sortie|long/.test(l);
+      if (resolvedType==='work')  return /fraction|vma|interval/.test(l);
+      if (resolvedType==='tempo') return /seuil|tempo|threshold/.test(l);
+      if (resolvedType==='ef')    return /endurance|fonda|footing|ef\b/.test(l);
+      return true;
+    })();
+    const displayLabel = _labelOk ? d.label : (_typeDefaultLabel[resolvedType] || d.label);
+    const pillLabel = intensityBadge ? ('⚡ ' + intensityBadge) : displayLabel;
     // Pour les séances intenses avec badge : afficher le label complet dans le détail
     const detailHtml = this._SIMPLE_TYPES[resolvedType]
       ? (d.detail ? '<div class="session-detail" style="margin-top:3px;">' + this._extractWorkPart(d.detail) + '</div>' : '')
