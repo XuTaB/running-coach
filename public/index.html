@@ -49,8 +49,19 @@
     <!-- SETUP WIZARD -->
     <div id="screen-setup" class="screen">
       <div class="setup-header">
-        <div class="progress-bar" id="setup-progress-bar" onclick="Setup.jumpToStep(event)"><div class="progress-fill" id="setup-progress"></div></div>
-        <span class="setup-step-label" id="setup-step-label">Étape 1 / 5</span>
+        <div style="position:relative;flex:1;">
+          <div class="progress-bar" id="setup-progress-bar"
+               onclick="Setup.jumpToStep(event)"
+               onmousemove="Setup.hoverStep(event)"
+               onmouseleave="Setup.hideStepTooltip()"
+               ontouchmove="Setup.hoverStep(event)"
+               ontouchend="Setup.hideStepTooltip()">
+            <div class="progress-fill" id="setup-progress"></div>
+            <div id="setup-progress-segments"></div>
+          </div>
+          <div id="setup-step-tooltip" style="display:none;position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--text-muted);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        </div>
+        <span class="setup-step-label" id="setup-step-label">1 / 5</span>
       </div>
       <div id="setup-content" class="setup-content"></div>
     </div>

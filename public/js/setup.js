@@ -36,12 +36,9 @@ const Setup = {
 
   // ── Rendu d'une étape ───────────────────────────────────────────────────────
   _render() {
-    const total   = this.steps.length;
-    const current = this.stepIndex + 1;
     const stepId  = this.steps[this.stepIndex];
 
-    document.getElementById('setup-progress').style.width = (current / total * 100) + '%';
-    document.getElementById('setup-step-label').textContent = `${current} / ${total}`;
+    this._updateProgressBar();
 
     const content = document.getElementById('setup-content');
     content.innerHTML = this._renderStep(stepId);
@@ -542,15 +539,73 @@ const Setup = {
     }
   },
 
-  jumpToStep(event) {
+  _stepLabel(stepId) {
+    const labels = {
+      general:        'Profil',
+      sport_history:  'Historique',
+      constraints:    'Contraintes',
+      goal_main:      'Objectif',
+      goal_race:      'Course cible',
+      goal_fitness:   'Forme',
+      goal_start:     'Débutant',
+      goal_secondary: 'Course secondaire',
+      goal_race_2:    'Course 2',
+      schedule:       'Planning',
+      prs:            'Records',
+      plan_prep:      'Récap',
+      strava:         'Strava',
+    };
+    return labels[stepId] || stepId;
+  },
+
+  _updateProgressBar() {
+    const total = this.steps.length;
+    const current = this.stepIndex + 1;
+    document.getElementById('setup-progress').style.width = (current / total * 100) + '%';
+    document.getElementById('setup-step-label').textContent = `${current} / ${total}`;
+
+    // Segments
+    const seg = document.getElementById('setup-progress-segments');
+    if (!seg) return;
+    seg.innerHTML = this.steps.slice(0, -1).map((_, i) => {
+      const pct = ((i + 1) / total * 100).toFixed(2);
+      const done = i < this.stepIndex;
+      return `<div style="position:absolute;left:${pct}%;top:0;width:2px;height:100%;background:${done ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)'};transform:translateX(-50%);"></div>`;
+    }).join('');
+  },
+
+  _getBarRatio(event) {
     const bar = document.getElementById('setup-progress-bar');
-    if (!bar) return;
-    const ratio = event.offsetX / bar.offsetWidth;
-    const target = Math.floor(ratio * this.steps.length);
-    const idx = Math.max(0, Math.min(target, this.steps.length - 1));
+    if (!bar) return 0;
+    const x = event.touches ? event.touches[0].clientX - bar.getBoundingClientRect().left : event.offsetX;
+    return Math.max(0, Math.min(1, x / bar.offsetWidth));
+  },
+
+  jumpToStep(event) {
+    const ratio = this._getBarRatio(event);
+    const idx = Math.max(0, Math.min(Math.floor(ratio * this.steps.length), this.steps.length - 1));
     this._saveCurrentStep(true);
     this.stepIndex = idx;
     this._render();
+    this.hideStepTooltip();
+  },
+
+  hoverStep(event) {
+    const ratio = this._getBarRatio(event);
+    const idx = Math.max(0, Math.min(Math.floor(ratio * this.steps.length), this.steps.length - 1));
+    const tooltip = document.getElementById('setup-step-tooltip');
+    if (!tooltip) return;
+    const pct = (ratio * 100).toFixed(1);
+    tooltip.style.display = 'block';
+    // Ancre le tooltip sur le segment visé
+    tooltip.style.left = Math.max(0, Math.min(parseFloat(pct) - 10, 70)) + '%';
+    tooltip.style.right = 'auto';
+    tooltip.textContent = `${idx + 1}. ${this._stepLabel(this.steps[idx])}`;
+  },
+
+  hideStepTooltip() {
+    const tooltip = document.getElementById('setup-step-tooltip');
+    if (tooltip) tooltip.style.display = 'none';
   },
 
   // ── Sauvegarde de l'étape courante ──────────────────────────────────────────
