@@ -720,6 +720,8 @@ const App = {
   toggleDark() {
     const isDark = document.body.classList.toggle('dark');
     localStorage.setItem('coach_dark_mode', isDark);
+    const lbl = document.getElementById('dark-mode-label');
+    if (lbl) lbl.textContent = isDark ? 'Activé' : 'Désactivé';
   },
 
   // ── Détection et analyse du run test ────────────────────────────────────────

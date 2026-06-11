@@ -685,35 +685,39 @@ const UI = {
       // Rétrocompatibilité si appelé avec les anciens paramètres (s2025, s2026)
       statsArr = [arguments[1], arguments[0]].filter(Boolean);
     }
-    const fmtKm  = km  => km.toFixed(0) + ' km';
+    const currentYear = new Date().getFullYear();
+    const fmtKm  = km  => km.toFixed(0);
     const fmtDur = sec => {
-      const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
-      return h + 'h' + (m < 10 ? '0' : '') + m;
+      const h = Math.floor(sec / 3600);
+      return h + 'h';
     };
     const fmtPace = sec => {
       if (!sec) return '--';
       const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-      return m + ':' + (s < 10 ? '0' + s : '' + s) + '/km';
+      return m + ':' + (s < 10 ? '0' + s : '' + s);
     };
-    const fmtElev = m => '+' + m.toLocaleString('fr-FR') + ' m';
+    const fmtElev = m => '+' + Math.round(m / 100) / 10 + 'k';
 
     const row = (s) => {
       if (!s) return '';
-      const longestStr = s.longestKm ? s.longestKm.toFixed(1) + ' km' : '--';
-      const stat = (val, lbl) => `<div style="min-width:0;">
-        <div style="font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;">${val}</div>
-        <div style="font-size:10px;color:var(--text-hint);margin-top:1px;">${lbl}</div>
+      const isCurrent = s.year === currentYear;
+      const yearColor = isCurrent ? 'var(--orange)' : 'var(--text-hint)';
+      const valColor  = isCurrent ? 'var(--text)'   : 'var(--text-muted)';
+      const longestStr = s.longestKm ? Math.round(s.longestKm) + '' : '--';
+      const stat = (val, lbl, unit) => `<div style="min-width:0;overflow:hidden;">
+        <div style="font-size:14px;font-weight:700;color:${valColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${val}</div>
+        <div style="font-size:9px;color:var(--text-hint);margin-top:1px;line-height:1.2;">${lbl}${unit ? '<br>(' + unit + ')' : ''}</div>
       </div>`;
       return `
         <div class="year-stats-row" style="padding:8px 0;border-bottom:0.5px solid var(--border);">
-          <div style="font-size:12px;font-weight:700;color:var(--orange);margin-bottom:6px;">${s.year}</div>
-          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;text-align:center;">
-            ${stat(s.count, 'courses')}
-            ${stat(fmtKm(s.totalKm), 'distance')}
-            ${stat(fmtDur(s.totalSeconds), 'temps')}
-            ${stat(fmtElev(s.totalElevation), 'D+')}
-            ${stat(fmtPace(s.avgPace), 'allure')}
-            ${stat(longestStr, 'max')}
+          <div style="font-size:12px;font-weight:700;color:${yearColor};margin-bottom:6px;">${s.year}</div>
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;">
+            ${stat(s.count,              'courses',  '')}
+            ${stat(fmtKm(s.totalKm),    'distance', 'km')}
+            ${stat(fmtDur(s.totalSeconds),'temps',  'h')}
+            ${stat(fmtElev(s.totalElevation), 'D+', 'm')}
+            ${stat(fmtPace(s.avgPace),   'allure',  '/km')}
+            ${stat(longestStr,           'max',     'km')}
           </div>
         </div>`;
     };
@@ -1590,6 +1594,13 @@ const UI = {
           <span class="settings-value" style="color:${Strava.isConnected() ? 'var(--green)' : 'var(--orange)'};">${Strava.isConnected() ? '✓ Connecté' : 'Non connecté'}</span>
         </div>
         ${Strava.isConnected() ? `<div class="settings-row" onclick="App.disconnectStrava()"><span class="settings-label" style="color:var(--red);">Déconnecter Strava</span></div>` : `<div class="settings-row" onclick="Strava.authorize()"><span class="settings-label" style="color:var(--orange);">Connecter Strava</span></div>`}
+      </div>
+      <div class="settings-section">
+        <div class="settings-group-label">Affichage</div>
+        <div class="settings-row" onclick="App.toggleDark()">
+          <span class="settings-label">Mode sombre</span>
+          <span class="settings-value" id="dark-mode-label">${document.body.classList.contains('dark') ? 'Activé' : 'Désactivé'}</span>
+        </div>
       </div>
       <div class="settings-section">
         <div class="settings-group-label">Compte</div>
