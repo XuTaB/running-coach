@@ -696,7 +696,7 @@ const UI = {
       const m = Math.floor(sec / 60), s = Math.round(sec % 60);
       return m + ':' + (s < 10 ? '0' + s : '' + s);
     };
-    const fmtElev = m => '+' + m.toLocaleString('fr-FR') + ' m';
+    const fmtElev = m => (m >= 1000 ? (Math.round(m / 100) / 10).toFixed(1) + 'k' : m) + ' m';
 
     const row = (s) => {
       if (!s) return '';
@@ -713,10 +713,10 @@ const UI = {
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;">
             ${stat(s.year,                         '', yearColor)}
             ${stat(fmtKm(s.totalKm) + ' km',       'distance')}
-            ${stat(fmtElev(s.totalElevation),       'D+')}
             ${stat(fmtDur(s.totalSeconds),          'temps')}
-            ${stat(fmtPace(s.avgPace) + '/km',      'allure')}
+            ${stat(fmtElev(s.totalElevation),       'D+')}
             ${stat(longestStr + ' km',              'max')}
+            ${stat(fmtPace(s.avgPace) + '/km',      'allure')}
           </div>
         </div>`;
     };

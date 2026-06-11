@@ -212,7 +212,7 @@ input[type=range]::-moz-range-thumb {
   flex-shrink: 0;
 }
 .top-bar-left { display: flex; align-items: center; gap: 10px; }
-.top-bar-center { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
+.top-bar-center { position: absolute; left: 50%; transform: translateX(-50%); top: calc(var(--safe-top) + 14px); pointer-events: none; }
 .app-title-strava { font-size: 13px; font-weight: 900; letter-spacing: 0.1em; color: var(--text); font-style: italic; }
 .app-title-orange { color: var(--orange); }
 .top-bar-right { display: flex; gap: 6px; }
