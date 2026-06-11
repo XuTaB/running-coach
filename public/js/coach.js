@@ -117,50 +117,61 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
     }
   },
 
+  // Normalise le format week1/week2 vers {weeks:[]}
+  _normalizeWeekFormat(parsed) {
+    if (parsed.weeks) return parsed;
+    // Format alternatif : {week1:[...], week2:[...]} ou {week_1:[...]}
+    const weekKeys = Object.keys(parsed).filter(k => /^week[\d_]/.test(k)).sort();
+    if (!weekKeys.length) return null;
+    return { weeks: weekKeys.map(k => ({ days: parsed[k] || [] })) };
+  },
+
   // Extrait un plan JSON de la réponse du coach et le sauvegarde si valide
   tryExtractAndSavePlan(text) {
     try {
-      const start = text.indexOf('{"weeks"');
-      if (start === -1) return;
+      // Cherche le premier { qui pourrait être un plan (weeks ou week1/week2)
+      const start = Math.min(
+        ...[text.indexOf('{"weeks"'), text.indexOf('{"week1"'), text.indexOf('{"week_')].filter(i => i !== -1)
+      );
+      if (!isFinite(start)) return;
       const end = text.lastIndexOf('}');
       if (end === -1) return;
 
       const jsonStr = text.slice(start, end + 1);
-      const plan    = JSON.parse(jsonStr);
+      const parsed  = JSON.parse(jsonStr);
 
-      if (!plan.weeks || !Array.isArray(plan.weeks) || plan.weeks.length === 0) return;
+      // Normalise le format si nécessaire
+      const plan = this._normalizeWeekFormat(parsed);
+      if (!plan || !Array.isArray(plan.weeks) || plan.weeks.length === 0) return;
 
-      // Filtre les repos D'ABORD, puis valide qu'il reste des séances
+      const typeLabels = { ef: 'Endurance fondamentale', sl: 'Sortie longue', work: 'Fractionné', tempo: 'Séance seuil', recup: 'Récupération active' };
+
+      // Filtre les repos, ajoute le label manquant
       plan.weeks = plan.weeks.map(w => ({
         ...w,
-        days: (w.days || []).filter(d => d.type !== 'rest' && d.type !== 'recup' && d.type !== 'repos')
+        days: (w.days || [])
+          .filter(d => d.type !== 'rest' && d.type !== 'repos')
+          .map(d => ({ ...d, label: d.label || typeLabels[d.type] || d.type }))
       }));
 
-      // Valide la structure APRÈS filtrage — au moins une séance par semaine
+      // Valide — au moins une séance par semaine
       const hasValidDays = plan.weeks.every(w =>
         Array.isArray(w.days) && w.days.length > 0 &&
-        w.days.every(d => d.day && d.type && d.label)
+        w.days.every(d => d.day && d.type)
       );
       if (!hasValidDays) return;
 
-      // (filtre déjà appliqué ci-dessus)
-      plan.weeks = plan.weeks.map(w => ({
-        ...w,
-        days: w.days // déjà filtré
-      }));
-
       Storage.savePlan(plan);
       console.log('[Coach] ✅ Plan extrait et sauvegardé automatiquement');
-      return true;
 
-      // Notifie l'app pour rafraîchir les onglets accueil et plan
+      // Notifie l'app pour rafraîchir
       if (typeof App !== 'undefined') {
         setTimeout(() => {
           if (App.currentTab === 'home') UI.renderHome(Storage.getProfile(), App.activities, plan);
-          if (App.currentTab === 'plan') UI.renderPlanTab(plan, false);
           UI.toast('Plan mis à jour ✓');
         }, 500);
       }
+      return true;
     } catch(e) {
       // Pas de plan dans la réponse — normal
     }

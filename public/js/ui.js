@@ -1419,8 +1419,9 @@ const UI = {
         if (ei === -1) { cleaned2 += text.slice(si); break; }
         try {
           var parsed = JSON.parse(text.slice(si, ei + 1));
-          if (parsed && parsed.weeks && Array.isArray(parsed.weeks)) {
-            planHtml = self2._renderInlinePlan(parsed);
+          var normalized = Coach._normalizeWeekFormat(parsed);
+          if (normalized && Array.isArray(normalized.weeks)) {
+            planHtml = self2._renderInlinePlan(normalized);
           }
           // Autre JSON valide → supprimé silencieusement
         } catch(e) {
