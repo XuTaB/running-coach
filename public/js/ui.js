@@ -49,7 +49,7 @@ const UI = {
       } catch(e) {}
 
       const yearStatsBlock = yearStatsInner
-        ? `<div id="year-stats-block" style="margin-top:10px;">${yearStatsInner}</div>`
+        ? `<div id="year-stats-block" style="margin-top:10px;margin-bottom:16px;">${yearStatsInner}</div>`
         : `<div id="year-stats-block" style="margin-top:10px;">
             <button class="btn-ghost" style="width:100%;font-size:13px;padding:9px 0;" onclick="App.loadYearStats(this)">
               📊 Charger les stats des 3 dernières années
@@ -696,7 +696,7 @@ const UI = {
       const m = Math.floor(sec / 60), s = Math.round(sec % 60);
       return m + ':' + (s < 10 ? '0' + s : '' + s);
     };
-    const fmtElev = m => '+' + Math.round(m / 100) / 10 + 'k';
+    const fmtElev = m => '+' + m.toLocaleString('fr-FR') + ' m';
 
     const row = (s) => {
       if (!s) return '';
@@ -704,20 +704,19 @@ const UI = {
       const yearColor = isCurrent ? 'var(--orange)' : 'var(--text-hint)';
       const valColor  = isCurrent ? 'var(--text)'   : 'var(--text-muted)';
       const longestStr = s.longestKm ? Math.round(s.longestKm) + '' : '--';
-      const stat = (val, lbl) => `<div style="min-width:0;overflow:hidden;">
-        <div style="font-size:14px;font-weight:700;color:${valColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${val}</div>
-        <div style="font-size:9px;color:var(--text-hint);margin-top:1px;">${lbl}</div>
+      const stat = (val, lbl, color) => `<div style="min-width:0;overflow:hidden;">
+        <div style="font-size:14px;font-weight:700;color:${color||valColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${val}</div>
+        ${lbl ? `<div style="font-size:9px;color:var(--text-hint);margin-top:1px;">${lbl}</div>` : ''}
       </div>`;
       return `
         <div class="year-stats-row" style="padding:8px 0;border-bottom:0.5px solid var(--border);">
-          <div style="font-size:12px;font-weight:700;color:${yearColor};margin-bottom:6px;">${s.year}</div>
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;">
-            ${stat(s.count,                       'courses')}
-            ${stat(fmtKm(s.totalKm) + ' km',      'distance')}
-            ${stat(fmtDur(s.totalSeconds),         'temps')}
-            ${stat(fmtElev(s.totalElevation),      'D+')}
-            ${stat(fmtPace(s.avgPace) + '/km',     'allure')}
-            ${stat(longestStr + ' km',             'max')}
+            ${stat(s.year,                         '', yearColor)}
+            ${stat(fmtKm(s.totalKm) + ' km',       'distance')}
+            ${stat(fmtElev(s.totalElevation),       'D+')}
+            ${stat(fmtDur(s.totalSeconds),          'temps')}
+            ${stat(fmtPace(s.avgPace) + '/km',      'allure')}
+            ${stat(longestStr + ' km',              'max')}
           </div>
         </div>`;
     };
