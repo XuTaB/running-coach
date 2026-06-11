@@ -673,16 +673,14 @@ const App = {
     Storage.addChatMessage({ role: 'assistant', content: reply, ts: Date.now() });
     UI.renderChatMessages();
 
-    // Si le coach parle de modifier/remplacer une séance sans JSON → bouton d'application
+    // Si le coach parle de modifier/remplacer une séance sans JSON → bouton persistant
     const mentionsModif = /remplace|modif|change|allège|adapte|récup|repos à la place/i.test(reply);
     const hasJson = reply.includes('"weeks"');
     if (mentionsModif && !hasJson) {
+      localStorage.setItem('coach_pending_modif', '1');
       const container = document.getElementById('chat-messages');
-      if (container) {
-        const btn2 = document.createElement('div');
-        btn2.className = 'msg-row';
-        btn2.innerHTML = `<button class="btn-orange" style="margin:6px auto;display:block;font-size:13px;" onclick="App.applyCoachModification(this)">↻ Appliquer la modification au plan</button>`;
-        container.appendChild(btn2);
+      if (container && !document.getElementById('apply-modif-btn-row')) {
+        UI._appendApplyButton(container);
         container.scrollTop = container.scrollHeight;
       }
     }
@@ -715,7 +713,8 @@ const App = {
       const data = await res.json();
       const text = data.content?.[0]?.text || '';
       const saved = Coach.tryExtractAndSavePlan(text);
-      if (btnEl?.parentElement) btnEl.parentElement.remove();
+      localStorage.removeItem('coach_pending_modif');
+      document.getElementById('apply-modif-btn-row')?.remove();
       if (!saved) UI.toast('Le plan n\'a pas pu être mis à jour, réessaie');
     } catch(e) {
       UI.toast('Erreur lors de la mise à jour');

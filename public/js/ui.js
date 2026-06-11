@@ -1350,8 +1350,25 @@ const UI = {
              <div class="msg-bubble coach">${this.formatCoachMessage(m.content)}</div>
            </div>`
       ).join('');
+
+      // Affiche le bouton d'application si une modification est en attente
+      if (localStorage.getItem('coach_pending_modif') === '1') {
+        this._appendApplyButton(container);
+      }
     }
     container.scrollTop = container.scrollHeight;
+  },
+
+  _appendApplyButton(container) {
+    const div = document.createElement('div');
+    div.id = 'apply-modif-btn-row';
+    div.style.cssText = 'padding:12px 16px;';
+    div.innerHTML = `
+      <button onclick="App.applyCoachModification(this)"
+        style="width:100%;padding:14px;background:var(--orange);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+        ↻ Appliquer la modification au plan
+      </button>`;
+    container.appendChild(div);
   },
 
   addLoadingBubble() {
