@@ -151,6 +151,7 @@ INTERDIT : utiliser "puis" ou des virgules comme séparateur de phases — seul 
 
       Storage.savePlan(plan);
       console.log('[Coach] ✅ Plan extrait et sauvegardé automatiquement');
+      return true;
 
       // Notifie l'app pour rafraîchir les onglets accueil et plan
       if (typeof App !== 'undefined') {

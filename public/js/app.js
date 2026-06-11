@@ -673,7 +673,54 @@ const App = {
     Storage.addChatMessage({ role: 'assistant', content: reply, ts: Date.now() });
     UI.renderChatMessages();
 
+    // Si le coach parle de modifier/remplacer une séance sans JSON → bouton d'application
+    const mentionsModif = /remplace|modif|change|allège|adapte|récup|repos à la place/i.test(reply);
+    const hasJson = reply.includes('"weeks"');
+    if (mentionsModif && !hasJson) {
+      const container = document.getElementById('chat-messages');
+      if (container) {
+        const btn2 = document.createElement('div');
+        btn2.className = 'msg-row';
+        btn2.innerHTML = `<button class="btn-orange" style="margin:6px auto;display:block;font-size:13px;" onclick="App.applyCoachModification(this)">↻ Appliquer la modification au plan</button>`;
+        container.appendChild(btn2);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
     if (btn) btn.disabled = false;
+  },
+
+  async applyCoachModification(btnEl) {
+    if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Application…'; }
+    UI.toast('Mise à jour du plan…', 4000);
+
+    const history = Storage.getChatHistory().slice(-10); // derniers échanges
+    const profile = Storage.getProfile();
+    const plan    = Storage.getPlan();
+
+    const planStr = plan ? JSON.stringify(plan) : 'Aucun plan actuel';
+    const histStr = history.map(m => (m.role === 'user' ? 'Athlète: ' : 'Coach: ') + m.content.slice(0, 300)).join('\n');
+
+    const prompt = `Plan actuel:\n${planStr}\n\nDerniers échanges:\n${histStr}\n\nEn tenant compte de la modification discutée, génère le plan complet mis à jour (2 semaines). UNIQUEMENT du JSON valide.`;
+
+    try {
+      const res = await fetch('/api/coach/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: 'Tu es un générateur de plans running. Tu réponds UNIQUEMENT avec du JSON valide, aucun texte avant ou après, aucun bloc markdown. Format: {"weeks":[...]}',
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const saved = Coach.tryExtractAndSavePlan(text);
+      if (btnEl?.parentElement) btnEl.parentElement.remove();
+      if (!saved) UI.toast('Le plan n\'a pas pu être mis à jour, réessaie');
+    } catch(e) {
+      UI.toast('Erreur lors de la mise à jour');
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = '↻ Appliquer la modification au plan'; }
+    }
   },
 
   chatWithCoach(msg) {
