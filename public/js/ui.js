@@ -704,20 +704,20 @@ const UI = {
       const yearColor = isCurrent ? 'var(--orange)' : 'var(--text-hint)';
       const valColor  = isCurrent ? 'var(--text)'   : 'var(--text-muted)';
       const longestStr = s.longestKm ? Math.round(s.longestKm) + '' : '--';
-      const stat = (val, lbl, unit) => `<div style="min-width:0;overflow:hidden;">
+      const stat = (val, lbl) => `<div style="min-width:0;overflow:hidden;">
         <div style="font-size:14px;font-weight:700;color:${valColor};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${val}</div>
-        <div style="font-size:9px;color:var(--text-hint);margin-top:1px;line-height:1.2;">${lbl}${unit ? '<br>(' + unit + ')' : ''}</div>
+        <div style="font-size:9px;color:var(--text-hint);margin-top:1px;">${lbl}</div>
       </div>`;
       return `
         <div class="year-stats-row" style="padding:8px 0;border-bottom:0.5px solid var(--border);">
           <div style="font-size:12px;font-weight:700;color:${yearColor};margin-bottom:6px;">${s.year}</div>
           <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;">
-            ${stat(s.count,              'courses',  '')}
-            ${stat(fmtKm(s.totalKm),    'distance', 'km')}
-            ${stat(fmtDur(s.totalSeconds),'temps',  'h')}
-            ${stat(fmtElev(s.totalElevation), 'D+', 'm')}
-            ${stat(fmtPace(s.avgPace),   'allure',  '/km')}
-            ${stat(longestStr,           'max',     'km')}
+            ${stat(s.count,                       'courses')}
+            ${stat(fmtKm(s.totalKm) + ' km',      'distance')}
+            ${stat(fmtDur(s.totalSeconds),         'temps')}
+            ${stat(fmtElev(s.totalElevation),      'D+')}
+            ${stat(fmtPace(s.avgPace) + '/km',     'allure')}
+            ${stat(longestStr + ' km',             'max')}
           </div>
         </div>`;
     };

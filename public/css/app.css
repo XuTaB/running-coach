@@ -204,16 +204,16 @@ input[type=range]::-moz-range-thumb {
 
 /* ===== TOP BAR ===== */
 .top-bar {
-  display: flex; flex-direction: column;
-  padding: calc(var(--safe-top) + 10px) 16px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--safe-top) + 14px) 16px 12px;
   background: var(--bg);
   border-bottom: 0.5px solid var(--border);
   flex-shrink: 0;
 }
-.top-bar-title { text-align: center; margin-bottom: 8px; }
-.top-bar-row { display: flex; align-items: center; justify-content: space-between; }
-.top-bar-left { display: flex; align-items: center; gap: 10px; }
-.app-title-strava { font-size: 14px; font-weight: 900; letter-spacing: 0.1em; color: var(--text); font-style: italic; }
+.top-bar-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.top-bar-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.top-bar-apptitle { margin-left: 4px; }
+.app-title-strava { font-size: 13px; font-weight: 900; letter-spacing: 0.1em; color: var(--text); font-style: italic; }
 .app-title-orange { color: var(--orange); }
 .top-bar-right { display: flex; gap: 6px; }
 .avatar {
