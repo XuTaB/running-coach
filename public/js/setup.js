@@ -157,7 +157,7 @@ const Setup = {
           <label class="field-label">Historique de blessures</label>
           <div class="chips" id="s-injuries" style="flex-wrap:wrap;">
             ${[['knees','Genoux'],['ankles','Chevilles'],['calves','Mollets'],['tendons','Tendons/Achille'],['back','Dos/Hanche'],['stress','Fracture de stress'],['other','Autre'],['none','Aucune']].map(([v,l])=>
-              `<div class="chip${(d.injuries||[]).includes(v)?' danger':''}" onclick="Setup._toggle('injuries','${v}',this,'danger')">${l}</div>`
+              `<div class="chip${(d.injuries||[]).includes(v)?' active':''}" onclick="Setup._toggle('injuries','${v}',this,'active')">${l}</div>`
             ).join('')}
           </div>
           <textarea class="field-input field-textarea" id="s-injuries-note" style="margin-top:8px;min-height:50px;" placeholder="Détails, zone fragile, blessure en cours...">${d.injuriesNote||''}</textarea>
