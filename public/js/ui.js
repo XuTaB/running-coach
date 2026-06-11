@@ -67,7 +67,7 @@ const UI = {
 
       const renderHomeWeek = (week, weekDates, skipPast, isCurrentWeek) => {
         const daysHtml = this._sortDays(week.days)
-          .filter(d => d.type !== 'rest' && d.type !== 'recup')
+          .filter(d => d.type !== 'rest' && d.type !== 'repos')
           .map(d => this._renderPlanDay(d, weekDates, now, skipPast))
           .filter(Boolean)
           .join('');
@@ -1538,7 +1538,7 @@ const UI = {
         html += '<div class="coach-plan-day">'
           + '<span class="coach-plan-dayname">' + self.escapeHtml(d.day) + '</span>'
           + '<div style="flex:1;">'
-          + '<span class="session-pill ' + tc + '" style="font-size:11px;padding:2px 8px;">' + self.escapeHtml(d.label) + '</span>'
+          + '<span class="session-pill ' + tc + '" style="font-size:11px;padding:2px 8px;">' + self.escapeHtml(d.label || d.type || '') + '</span>'
           + (detail ? '<div class="coach-plan-detail">' + self.escapeHtml(detail) + '</div>' : '')
           + '</div></div>';
       });
