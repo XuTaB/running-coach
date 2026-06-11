@@ -542,6 +542,17 @@ const Setup = {
     }
   },
 
+  jumpToStep(event) {
+    const bar = document.getElementById('setup-progress-bar');
+    if (!bar) return;
+    const ratio = event.offsetX / bar.offsetWidth;
+    const target = Math.floor(ratio * this.steps.length);
+    const idx = Math.max(0, Math.min(target, this.steps.length - 1));
+    this._saveCurrentStep(true);
+    this.stepIndex = idx;
+    this._render();
+  },
+
   // ── Sauvegarde de l'étape courante ──────────────────────────────────────────
   _saveCurrentStep(silent = false) {
     const id = this.steps[this.stepIndex];

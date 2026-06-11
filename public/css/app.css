@@ -93,7 +93,7 @@ input, select, textarea { font-family: var(--font); }
   border-bottom: 0.5px solid var(--border);
   display: flex; align-items: center; gap: 12px;
 }
-.progress-bar { flex: 1; height: 4px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+.progress-bar { flex: 1; height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; cursor: pointer; }
 .progress-fill { height: 100%; background: var(--orange); border-radius: 4px; transition: width 0.3s ease; }
 .setup-step-label { font-size: 12px; color: var(--text-hint); white-space: nowrap; }
 .setup-content {

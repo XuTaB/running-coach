@@ -929,16 +929,16 @@ const UI = {
           <span class="fb-label">Douleurs / gênes ?</span>
           <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px;">Sélectionne tout ce qui s'applique</div>
           <div class="chips" id="pain-chips-${aid}">
-            <div class="chip${(v.painAreas||[]).includes('knees') ? ' danger' : ''}"    onclick="UI.togglePainArea(${aid},'knees',this)">🦵 Genoux</div>
-            <div class="chip${(v.painAreas||[]).includes('calves') ? ' danger' : ''}"   onclick="UI.togglePainArea(${aid},'calves',this)">💪 Mollets</div>
-            <div class="chip${(v.painAreas||[]).includes('tendons') ? ' danger' : ''}"  onclick="UI.togglePainArea(${aid},'tendons',this)">🦶 Tendons</div>
-            <div class="chip${(v.painAreas||[]).includes('back') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'back',this)">🔙 Dos</div>
-            <div class="chip${(v.painAreas||[]).includes('hips') ? ' danger' : ''}"     onclick="UI.togglePainArea(${aid},'hips',this)">🍑 Hanches</div>
-            <div class="chip${(v.painAreas||[]).includes('sick') ? ' danger' : ''}"      onclick="UI.togglePainArea(${aid},'sick',this)">🤒 Malade</div>
-            <div class="chip${(v.painAreas||[]).includes('none') ? ' active-soft' : ''}" onclick="UI.togglePainArea(${aid},'none',this)">✅ Aucune</div>
+            <div class="chip${(v.painAreas||[]).includes('knees')   ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'knees',this)">🦵 Genoux</div>
+            <div class="chip${(v.painAreas||[]).includes('calves')  ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'calves',this)">💪 Mollets</div>
+            <div class="chip${(v.painAreas||[]).includes('tendons') ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'tendons',this)">🦶 Tendons</div>
+            <div class="chip${(v.painAreas||[]).includes('back')    ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'back',this)">🔙 Dos</div>
+            <div class="chip${(v.painAreas||[]).includes('hips')    ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'hips',this)">🍑 Hanches</div>
+            <div class="chip${(v.painAreas||[]).includes('sick')    ? ' active' : ''}"     onclick="UI.togglePainArea(${aid},'sick',this)">🤒 Malade</div>
+            <div class="chip${(v.painAreas||[]).includes('none')    ? ' active-soft' : ''}" onclick="UI.togglePainArea(${aid},'none',this)">✅ Aucune</div>
           </div>
           ${(v.painAreas||[]).filter(p => p !== 'none').length > 0 ? `
-          <textarea class="field-input field-textarea" style="margin-top:8px;min-height:50px;" placeholder="Décris la douleur (intensité, moment dans la course...)"
+          <textarea class="field-input field-textarea pain-detail-ta" style="margin-top:8px;min-height:50px;" placeholder="Décris la douleur (intensité, moment dans la course...)"
             oninput="UI.setFeedbackVal(${aid},'painDetail',this.value)">${v.painDetail||''}</textarea>` : ''}
         </div>
 
@@ -1047,22 +1047,20 @@ const UI = {
     if (!fb.painAreas) fb.painAreas = [];
 
     if (area === 'none') {
-      // Sélectionne "Aucune" et désélectionne tout le reste
       fb.painAreas = ['none'];
-      document.querySelectorAll(`#pain-chips-${actId} .chip`).forEach(c => c.classList.remove('danger','active-soft'));
+      document.querySelectorAll(`#pain-chips-${actId} .chip`).forEach(c => c.classList.remove('active','active-soft'));
       el.classList.add('active-soft');
     } else {
-      // Retire "Aucune" si on sélectionne une zone
       fb.painAreas = fb.painAreas.filter(p => p !== 'none');
       document.querySelector(`#pain-chips-${actId} .chip:last-child`)?.classList.remove('active-soft');
 
       const idx = fb.painAreas.indexOf(area);
       if (idx > -1) {
         fb.painAreas.splice(idx, 1);
-        el.classList.remove('danger');
+        el.classList.remove('active');
       } else {
         fb.painAreas.push(area);
-        el.classList.add('danger');
+        el.classList.add('active');
       }
     }
 
