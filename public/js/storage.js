@@ -52,7 +52,10 @@ const Storage = {
   // ── Chat ────────────────────────────────────────────────────────────────────
   getChatHistory()         { return this.get().chatHistory || []; },
   getChatSummary()         { return this.get().chatSummary || null; },
-  saveChatSummary(summary) { this.update({ chatSummary: summary }); },
+  saveChatSummary(summary) {
+    this.update({ chatSummary: summary });
+    this._syncChatSummary(summary);
+  },
   saveChatHistory(msgs) {
     this.update({ chatHistory: msgs });
     this._syncChat(msgs);
@@ -100,6 +103,7 @@ const Storage = {
   async _syncPlan(plan)                    { this._post('/api/data/plan',         { plan }); },
   async _syncChat(messages)                { this._post('/api/data/chat',         { messages }); },
   async _syncYearlyStats(stats)            { this._post('/api/data/yearlystats',  { stats }); },
+  async _syncChatSummary(summary)          { this._post('/api/data/chatsummary',  { summary }); },
 
   // ── Pull depuis la base (au login ou reconnexion sur un nouvel appareil) ────
   async pullFromCloud() {
@@ -119,7 +123,8 @@ const Storage = {
         plan:        data.plan            || local.plan,
         feedbacks:   { ...(local.feedbacks || {}), ...(data.feedbacks || {}) },
         chatHistory: data.chat_history    || local.chatHistory || [],
-        yearlyStats: { ...(local.yearlyStats || {}), ...(data.yearly_stats || {}) }
+        yearlyStats: { ...(local.yearlyStats || {}), ...(data.yearly_stats || {}) },
+        chatSummary: data.chat_summary    || local.chatSummary || null
       };
       this.set(merged);
       console.log('[Storage] ✅ Données cloud chargées');

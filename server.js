@@ -42,6 +42,10 @@ if (process.env.DATABASE_URL) {
           ADD COLUMN IF NOT EXISTS yearly_stats JSONB DEFAULT '{}'::jsonb
       `))
       .then(() => client.query(`
+        ALTER TABLE public.user_data
+          ADD COLUMN IF NOT EXISTS chat_summary TEXT DEFAULT NULL
+      `))
+      .then(() => client.query(`
         ALTER TABLE public.user_data ENABLE ROW LEVEL SECURITY
       `))
       .then(() => {
@@ -290,6 +294,17 @@ app.post('/api/data/chat', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/data/chatsummary', async (req, res) => {
+  if (!db) return res.json({ ok: true, mode: 'local' });
+  const athleteId = getAthleteId(req);
+  if (!athleteId) return res.status(401).json({ error: 'Non authentifié' });
+  if (!req.session.athleteId) req.session.athleteId = parseInt(athleteId);
+  try {
+    await dbUpsert(athleteId, { chat_summary: req.body.summary });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/data/yearlystats', async (req, res) => {
   if (!db) return res.json({ ok: true, mode: 'local' });
   const athleteId = getAthleteId(req);
@@ -469,6 +484,13 @@ app.post('/api/coach/chat', async (req, res) => {
       contents.forEach((c, i) => console.log(`  [${i}] ${c.role}: ${(c.parts[0]?.text || '').slice(0, 120)}…`));
     }
     const text = await callGemini(contents);
+
+    // Persiste le résumé en DB si nouvellement généré côté serveur
+    const newSummary = summary && !clientSummary ? summary : null;
+    if (newSummary && req.session.athleteId) {
+      dbUpsert(req.session.athleteId, { chat_summary: newSummary }).catch(() => {});
+    }
+
     res.json({ content: [{ type: 'text', text }], summary });
   } catch (err) {
     console.error('[COACH] Erreur finale:', err.message);
